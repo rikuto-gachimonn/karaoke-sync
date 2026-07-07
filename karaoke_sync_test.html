@@ -46,6 +46,28 @@
     .status {
       font-weight: bold;
     }
+
+    .song-card {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px;
+      margin: 8px 0;
+      background: #fafafa;
+    }
+
+    .song-card-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .song-card-meta {
+      font-size: 14px;
+      color: #555;
+    }
+
+    .empty-message {
+      color: #777;
+    }
   </style>
 </head>
 <body>
@@ -82,6 +104,12 @@
     <button onclick="saveSongInfo()">曲情報を保存</button>
 
     <p>保存状態：<span id="songInfoStatus">未保存</span></p>
+  </div>
+
+  <div class="section">
+    <h3>保存済み曲リスト</h3>
+    <button onclick="renderSongList()">曲リストを更新</button>
+    <div id="songList"></div>
   </div>
 
   <div class="section">
@@ -125,6 +153,7 @@
     let detecting = false;
 
     const threshold = 0.08;
+    const songListKey = "song_list";
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
@@ -146,6 +175,7 @@
 
     function onPlayerReady() {
       setVideoStatus("YouTubeプレイヤー準備完了");
+      renderSongList();
     }
 
     function onPlayerStateChange(event) {
@@ -248,6 +278,11 @@
       loadSongInfo();
     }
 
+    function loadVideoFromList(selectedVideoId) {
+      document.getElementById("videoInput").value = selectedVideoId;
+      loadVideo();
+    }
+
     function loadSavedPosition() {
       if (!videoId) return;
 
@@ -293,9 +328,12 @@
 
       savedSec = player.getCurrentTime();
       localStorage.setItem("sync_" + videoId, savedSec);
+      addVideoToSongList(videoId);
 
       document.getElementById("saved").textContent =
         Number(savedSec).toFixed(2) + "秒";
+
+      renderSongList();
     }
 
     function playSaved() {
@@ -419,9 +457,12 @@
       };
 
       localStorage.setItem("song_info_" + videoId, JSON.stringify(songInfo));
+      addVideoToSongList(videoId);
 
       document.getElementById("songInfoStatus").textContent =
         "保存済み：" + formatSongInfo(songInfo);
+
+      renderSongList();
     }
 
     function loadSongInfo() {
@@ -459,6 +500,140 @@
       const service = songInfo.service || "機種未選択";
 
       return title + " / " + artist + " / " + service;
+    }
+
+    function getSongList() {
+      const rawSongList = localStorage.getItem(songListKey);
+
+      if (!rawSongList) {
+        return [];
+      }
+
+      try {
+        const list = JSON.parse(rawSongList);
+        return Array.isArray(list) ? list : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveSongList(list) {
+      localStorage.setItem(songListKey, JSON.stringify(list));
+    }
+
+    function addVideoToSongList(targetVideoId) {
+      const list = getSongList();
+
+      if (!list.includes(targetVideoId)) {
+        list.unshift(targetVideoId);
+        saveSongList(list);
+      }
+    }
+
+    function removeVideoFromSongList(targetVideoId) {
+      const list = getSongList().filter(id => id !== targetVideoId);
+      saveSongList(list);
+    }
+
+    function renderSongList() {
+      const songListElement = document.getElementById("songList");
+      songListElement.innerHTML = "";
+
+      const list = getSongList();
+
+      if (list.length === 0) {
+        const emptyMessage = document.createElement("p");
+        emptyMessage.className = "empty-message";
+        emptyMessage.textContent = "保存済みの曲はまだありません。";
+        songListElement.appendChild(emptyMessage);
+        return;
+      }
+
+      for (const id of list) {
+        const card = document.createElement("div");
+        card.className = "song-card";
+
+        const rawSongInfo = localStorage.getItem("song_info_" + id);
+        const rawSavedSec = localStorage.getItem("sync_" + id);
+
+        let songInfo = {
+          title: "曲名未入力",
+          artist: "アーティスト未入力",
+          service: "機種未選択"
+        };
+
+        if (rawSongInfo) {
+          try {
+            const parsedSongInfo = JSON.parse(rawSongInfo);
+            songInfo = {
+              title: parsedSongInfo.title || "曲名未入力",
+              artist: parsedSongInfo.artist || "アーティスト未入力",
+              service: parsedSongInfo.service || "機種未選択"
+            };
+          } catch (error) {
+            // 壊れた曲情報は初期表示にする
+          }
+        }
+
+        const title = document.createElement("div");
+        title.className = "song-card-title";
+        title.textContent = songInfo.title;
+
+        const meta = document.createElement("div");
+        meta.className = "song-card-meta";
+        meta.textContent =
+          songInfo.artist + " / " +
+          songInfo.service + " / " +
+          "保存位置：" + (rawSavedSec !== null ? Number(rawSavedSec).toFixed(2) + "秒" : "未保存");
+
+        const idText = document.createElement("div");
+        idText.className = "song-card-meta";
+        idText.textContent = "動画ID：" + id;
+
+        const loadButton = document.createElement("button");
+        loadButton.textContent = "読み込み";
+        loadButton.onclick = function() {
+          loadVideoFromList(id);
+        };
+
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "削除";
+        deleteButton.onclick = function() {
+          deleteSongData(id);
+        };
+
+        card.appendChild(title);
+        card.appendChild(meta);
+        card.appendChild(idText);
+        card.appendChild(loadButton);
+        card.appendChild(deleteButton);
+
+        songListElement.appendChild(card);
+      }
+    }
+
+    function deleteSongData(targetVideoId) {
+      const ok = confirm("この曲の保存情報を削除しますか？");
+
+      if (!ok) {
+        return;
+      }
+
+      localStorage.removeItem("sync_" + targetVideoId);
+      localStorage.removeItem("song_info_" + targetVideoId);
+      removeVideoFromSongList(targetVideoId);
+
+      if (videoId === targetVideoId) {
+        savedSec = null;
+
+        document.getElementById("saved").textContent = "未保存";
+        document.getElementById("songTitle").value = "";
+        document.getElementById("artistName").value = "";
+        document.getElementById("karaokeService").value = "";
+        document.getElementById("songInfoStatus").textContent = "未保存";
+      }
+
+      renderSongList();
     }
 
     function setVideoStatus(message) {
