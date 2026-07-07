@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Karaoke Sync Test</title>
+</head>
+<body>
+  <h2>Karaoke Sync Test</h2>
+
+  <input id="videoId" placeholder="YouTube動画ID">
+  <button onclick="loadVideo()">読み込み</button>
+
+  <div id="player"></div>
+
+  <p>現在位置：<span id="current">0.00</span>秒</p>
+  <p>保存位置：<span id="saved">未保存</span></p>
+  <p>検知補正：<span id="detectOffset">0.00</span>秒</p>
+  <p>音量：<span id="volume">0.000</span></p>
+
+  <button onclick="play()">再生</button>
+  <button onclick="pause()">停止</button>
+  <button onclick="seek(-0.1)">-0.1秒</button>
+  <button onclick="seek(0.1)">+0.1秒</button>
+  <button onclick="save()">今合ってる</button>
+  <button onclick="playSaved()">保存位置から再生</button>
+
+  <br><br>
+
+  <button onclick="changeDetectOffset(-0.1)">補正 -0.1秒</button>
+  <button onclick="changeDetectOffset(0.1)">補正 +0.1秒</button>
+
+  <br><br>
+
+  <button onclick="startMicDetect()">音検知スタート</button>
+  <button onclick="stopMicDetect()">音検知停止</button>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player;
+    let videoId = "";
+    let savedSec = null;
+    let detectOffsetSec = 0.0;
+
+    let audioContext;
+    let analyser;
+    let micSource;
+    let dataArray;
+    let detecting = false;
+
+    const threshold = 0.08;
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player("player", {
+        height: "240",
+        width: "360",
+        videoId: "",
+        playerVars: {
+          playsinline: 1
+        }
+      });
+
+      setInterval(updateCurrentTime, 100);
+    }
+
+    function loadVideo() {
+      videoId = document.getElementById("videoId").value.trim();
+
+      if (!videoId) {
+        alert("YouTube動画IDを入力してね");
+        return;
+      }
+
+      player.loadVideoById(videoId);
+
+      savedSec = localStorage.getItem("sync_" + videoId);
+      document.getElementById("saved").textContent =
+        savedSec !== null ? Number(savedSec).toFixed(2) + "秒" : "未保存";
+    }
+
+    function play() {
+      player.playVideo();
+    }
+
+    function pause() {
+      player.pauseVideo();
+    }
+
+    function seek(diff) {
+      const t = player.getCurrentTime();
+      player.seekTo(Math.max(0, t + diff), true);
+    }
+
+    function save() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
+      savedSec = player.getCurrentTime();
+      localStorage.setItem("sync_" + videoId, savedSec);
+
+      document.getElementById("saved").textContent =
+        Number(savedSec).toFixed(2) + "秒";
+    }
+
+    function playSaved() {
+      if (savedSec === null) {
+        alert("先に保存位置を作ってね");
+        return;
+      }
+
+      const startSec = Math.max(0, Number(savedSec) + detectOffsetSec);
+
+      player.seekTo(startSec, true);
+      player.playVideo();
+    }
+
+    function updateCurrentTime() {
+      if (!player || typeof player.getCurrentTime !== "function") return;
+
+      document.getElementById("current").textContent =
+        player.getCurrentTime().toFixed(2);
+    }
+
+    function changeDetectOffset(diff) {
+      detectOffsetSec += diff;
+
+      document.getElementById("detectOffset").textContent =
+        detectOffsetSec.toFixed(2);
+    }
+
+    async function startMicDetect() {
+      if (savedSec === null) {
+        alert("先に保存位置を作ってね");
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        audioContext = new AudioContext();
+        analyser = audioContext.createAnalyser();
+        micSource = audioContext.createMediaStreamSource(stream);
+
+        analyser.fftSize = 2048;
+        dataArray = new Uint8Array(analyser.fftSize);
+
+        micSource.connect(analyser);
+
+        detecting = true;
+        detectVolume();
+
+      } catch (error) {
+        alert("マイクが使えませんでした");
+        console.error(error);
+      }
+    }
+
+    function detectVolume() {
+      if (!detecting) return;
+
+      analyser.getByteTimeDomainData(dataArray);
+
+      let sum = 0;
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = (dataArray[i] - 128) / 128;
+        sum += v * v;
+      }
+
+      const volume = Math.sqrt(sum / dataArray.length);
+      document.getElementById("volume").textContent = volume.toFixed(3);
+
+      if (volume > threshold) {
+        detecting = false;
+        playSaved();
+        return;
+      }
+
+      requestAnimationFrame(detectVolume);
+    }
+
+    function stopMicDetect() {
+      detecting = false;
+    }
+  </script>
+</body>
+</html>
