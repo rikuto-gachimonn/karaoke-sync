@@ -242,6 +242,7 @@
 
     const defaultThreshold = 0.08;
     const songListKey = "song_list";
+    const backupVersion = "0.6";
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
@@ -264,6 +265,7 @@
     function onPlayerReady() {
       setVideoStatus("YouTubeプレイヤー準備完了");
       renderSongList();
+      setupBackupControls();
       updateDetectSettingsView();
     }
 
@@ -877,6 +879,245 @@
 
         songListElement.appendChild(card);
       }
+    }
+
+    function setupBackupControls() {
+      if (document.getElementById("backupControls")) {
+        return;
+      }
+
+      const songListElement = document.getElementById("songList");
+
+      if (!songListElement || !songListElement.parentElement) {
+        return;
+      }
+
+      const container = document.createElement("div");
+      container.id = "backupControls";
+      container.style.marginTop = "16px";
+      container.style.padding = "12px";
+      container.style.border = "1px solid #ddd";
+      container.style.borderRadius = "8px";
+
+      const title = document.createElement("h3");
+      title.textContent = "データのバックアップ・復元";
+
+      const description = document.createElement("p");
+      description.textContent = "保存済み曲リスト、再生位置、曲情報、音検知設定をJSONファイルとして保存・復元できます。";
+
+      const exportButton = document.createElement("button");
+      exportButton.textContent = "JSONでエクスポート";
+      exportButton.onclick = exportBackupData;
+
+      const importInput = document.createElement("input");
+      importInput.type = "file";
+      importInput.accept = "application/json,.json";
+      importInput.style.display = "none";
+      importInput.onchange = importBackupData;
+
+      const importButton = document.createElement("button");
+      importButton.textContent = "JSONから復元";
+      importButton.onclick = function() {
+        importInput.click();
+      };
+
+      const clearButton = document.createElement("button");
+      clearButton.textContent = "全データ削除";
+      clearButton.onclick = clearAllSavedData;
+
+      const status = document.createElement("p");
+      status.id = "backupStatus";
+      status.textContent = "バックアップ機能は未実行です。";
+
+      container.appendChild(title);
+      container.appendChild(description);
+      container.appendChild(exportButton);
+      container.appendChild(importButton);
+      container.appendChild(clearButton);
+      container.appendChild(importInput);
+      container.appendChild(status);
+
+      songListElement.parentElement.insertBefore(container, songListElement);
+    }
+
+    function setBackupStatus(message) {
+      const backupStatus = document.getElementById("backupStatus");
+
+      if (backupStatus) {
+        backupStatus.textContent = message;
+      }
+    }
+
+    function createBackupData() {
+      const songIds = getSongList();
+      const songs = [];
+
+      for (const id of songIds) {
+        const rawSongInfo = localStorage.getItem("song_info_" + id);
+        const rawSavedSec = localStorage.getItem("sync_" + id);
+        const rawDetectSettings = localStorage.getItem("detect_settings_" + id);
+
+        let songInfo = null;
+        let detectSettings = null;
+
+        try {
+          songInfo = rawSongInfo ? JSON.parse(rawSongInfo) : null;
+        } catch (error) {
+          songInfo = null;
+        }
+
+        try {
+          detectSettings = rawDetectSettings ? JSON.parse(rawDetectSettings) : null;
+        } catch (error) {
+          detectSettings = null;
+        }
+
+        songs.push({
+          videoId: id,
+          savedSec: rawSavedSec,
+          songInfo: songInfo,
+          detectSettings: detectSettings
+        });
+      }
+
+      return {
+        appName: "Karaoke Sync",
+        backupVersion: backupVersion,
+        exportedAt: new Date().toISOString(),
+        songs: songs
+      };
+    }
+
+    function exportBackupData() {
+      const backupData = createBackupData();
+      const json = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const now = new Date();
+      const fileName =
+        "karaoke-sync-backup-" +
+        now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, "0") +
+        String(now.getDate()).padStart(2, "0") +
+        ".json";
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      URL.revokeObjectURL(url);
+
+      setBackupStatus("バックアップJSONをエクスポートしました。");
+    }
+
+    function importBackupData(event) {
+      const file = event.target.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        try {
+          const backupData = JSON.parse(e.target.result);
+
+          if (!backupData || !Array.isArray(backupData.songs)) {
+            setBackupStatus("復元できませんでした。JSON形式が正しくありません。");
+            return;
+          }
+
+          const currentList = getSongList();
+          const mergedList = [...currentList];
+          let importedCount = 0;
+          let updatedCount = 0;
+
+          for (const song of backupData.songs) {
+            if (!song || !isValidVideoId(song.videoId)) {
+              continue;
+            }
+
+            const id = song.videoId;
+            const alreadyExists = mergedList.includes(id);
+
+            if (!alreadyExists) {
+              mergedList.push(id);
+              importedCount++;
+            } else {
+              updatedCount++;
+            }
+
+            if (song.savedSec !== null && song.savedSec !== undefined) {
+              localStorage.setItem("sync_" + id, String(song.savedSec));
+            }
+
+            if (song.songInfo) {
+              localStorage.setItem("song_info_" + id, JSON.stringify(song.songInfo));
+            }
+
+            if (song.detectSettings) {
+              localStorage.setItem("detect_settings_" + id, JSON.stringify(song.detectSettings));
+            }
+          }
+
+          saveSongList(mergedList);
+          renderSongList();
+
+          setBackupStatus(
+            "復元しました。新規追加: " +
+              importedCount +
+              "件 / 上書き更新: " +
+              updatedCount +
+              "件"
+          );
+        } catch (error) {
+          setBackupStatus("復元できませんでした。JSONファイルを確認してください。");
+        } finally {
+          event.target.value = "";
+        }
+      };
+
+      reader.readAsText(file);
+    }
+
+    function clearAllSavedData() {
+      const ok = confirm("保存済み曲リスト、再生位置、曲情報、音検知設定をすべて削除しますか？");
+
+      if (!ok) {
+        return;
+      }
+
+      const songIds = getSongList();
+
+      for (const id of songIds) {
+        localStorage.removeItem("sync_" + id);
+        localStorage.removeItem("song_info_" + id);
+        localStorage.removeItem("detect_settings_" + id);
+      }
+
+      localStorage.removeItem(songListKey);
+
+      videoId = "";
+      savedSec = null;
+      detectOffsetSec = 0.0;
+      detectThreshold = defaultThreshold;
+
+      document.getElementById("videoInput").value = "";
+      document.getElementById("currentVideoId").textContent = "未読み込み";
+      document.getElementById("saved").textContent = "未保存";
+      document.getElementById("songTitle").value = "";
+      document.getElementById("artistName").value = "";
+      document.getElementById("karaokeService").value = "";
+      document.getElementById("songInfoStatus").textContent = "未保存";
+      document.getElementById("detectStatus").textContent = "検知設定は未保存です";
+
+      updateDetectSettingsView();
+      renderSongList();
+
+      setBackupStatus("全データを削除しました。");
     }
 
     function deleteSongData(targetVideoId) {
