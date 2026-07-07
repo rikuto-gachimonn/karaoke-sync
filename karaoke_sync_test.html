@@ -35,6 +35,11 @@
       min-width: 280px;
     }
 
+    input.small-input {
+      min-width: 80px;
+      width: 90px;
+    }
+
     button {
       cursor: pointer;
     }
@@ -117,8 +122,6 @@
 
     <p>現在位置：<span id="current">0.00</span>秒</p>
     <p>保存位置：<span id="saved">未保存</span></p>
-    <p>検知補正：<span id="detectOffset">0.00</span>秒</p>
-    <p>音量：<span id="volume">0.000</span></p>
 
     <button onclick="play()">再生</button>
     <button onclick="pause()">停止</button>
@@ -126,11 +129,39 @@
     <button onclick="seek(0.1)">+0.1秒</button>
     <button onclick="save()">今合ってる</button>
     <button onclick="playSaved()">保存位置から再生</button>
+  </div>
+
+  <div class="section">
+    <h3>音検知設定</h3>
+
+    <p>検知状態：<span id="detectStatus">停止中</span></p>
+    <p>現在音量：<span id="volume">0.000</span></p>
+    <p>検知補正：<span id="detectOffset">0.00</span>秒</p>
+
+    <label>
+      音量しきい値：
+      <input
+        id="detectThreshold"
+        class="small-input"
+        type="number"
+        min="0"
+        max="1"
+        step="0.005"
+        value="0.080"
+        onchange="updateDetectThresholdFromInput()"
+      >
+    </label>
 
     <br><br>
 
     <button onclick="changeDetectOffset(-0.1)">補正 -0.1秒</button>
     <button onclick="changeDetectOffset(0.1)">補正 +0.1秒</button>
+
+    <br><br>
+
+    <button onclick="changeDetectThreshold(-0.005)">しきい値 -0.005</button>
+    <button onclick="changeDetectThreshold(0.005)">しきい値 +0.005</button>
+    <button onclick="saveDetectSettings()">検知設定を保存</button>
 
     <br><br>
 
@@ -144,6 +175,7 @@
     let videoId = "";
     let savedSec = null;
     let detectOffsetSec = 0.0;
+    let detectThreshold = 0.08;
 
     let audioContext;
     let analyser;
@@ -152,7 +184,7 @@
     let dataArray;
     let detecting = false;
 
-    const threshold = 0.08;
+    const defaultThreshold = 0.08;
     const songListKey = "song_list";
 
     function onYouTubeIframeAPIReady() {
@@ -176,6 +208,7 @@
     function onPlayerReady() {
       setVideoStatus("YouTubeプレイヤー準備完了");
       renderSongList();
+      updateDetectSettingsView();
     }
 
     function onPlayerStateChange(event) {
@@ -276,6 +309,7 @@
 
       loadSavedPosition();
       loadSongInfo();
+      loadDetectSettings();
     }
 
     function loadVideoFromList(selectedVideoId) {
@@ -366,9 +400,92 @@
 
     function changeDetectOffset(diff) {
       detectOffsetSec += diff;
+      detectOffsetSec = Math.round(detectOffsetSec * 100) / 100;
+      updateDetectSettingsView();
+    }
 
+    function changeDetectThreshold(diff) {
+      detectThreshold += diff;
+      detectThreshold = Math.max(0, Math.min(1, detectThreshold));
+      detectThreshold = Math.round(detectThreshold * 1000) / 1000;
+      updateDetectSettingsView();
+    }
+
+    function updateDetectThresholdFromInput() {
+      const inputValue = Number(document.getElementById("detectThreshold").value);
+
+      if (Number.isNaN(inputValue)) {
+        detectThreshold = defaultThreshold;
+      } else {
+        detectThreshold = Math.max(0, Math.min(1, inputValue));
+      }
+
+      detectThreshold = Math.round(detectThreshold * 1000) / 1000;
+      updateDetectSettingsView();
+    }
+
+    function updateDetectSettingsView() {
       document.getElementById("detectOffset").textContent =
         detectOffsetSec.toFixed(2);
+
+      document.getElementById("detectThreshold").value =
+        detectThreshold.toFixed(3);
+    }
+
+    function saveDetectSettings() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
+      updateDetectThresholdFromInput();
+
+      const detectSettings = {
+        offset: detectOffsetSec,
+        threshold: detectThreshold
+      };
+
+      localStorage.setItem("detect_settings_" + videoId, JSON.stringify(detectSettings));
+      addVideoToSongList(videoId);
+      renderSongList();
+
+      document.getElementById("detectStatus").textContent =
+        "検知設定を保存しました";
+    }
+
+    function loadDetectSettings() {
+      if (!videoId) return;
+
+      const rawDetectSettings = localStorage.getItem("detect_settings_" + videoId);
+
+      if (!rawDetectSettings) {
+        detectOffsetSec = 0.0;
+        detectThreshold = defaultThreshold;
+        updateDetectSettingsView();
+        document.getElementById("detectStatus").textContent =
+          "検知設定は未保存です";
+        return;
+      }
+
+      try {
+        const detectSettings = JSON.parse(rawDetectSettings);
+
+        detectOffsetSec = Number(detectSettings.offset) || 0.0;
+        detectThreshold = Number(detectSettings.threshold) || defaultThreshold;
+
+        updateDetectSettingsView();
+
+        document.getElementById("detectStatus").textContent =
+          "検知設定を読み込みました";
+
+      } catch (error) {
+        detectOffsetSec = 0.0;
+        detectThreshold = defaultThreshold;
+        updateDetectSettingsView();
+
+        document.getElementById("detectStatus").textContent =
+          "検知設定の読み込みに失敗しました";
+      }
     }
 
     async function startMicDetect() {
@@ -383,7 +500,8 @@
       }
 
       try {
-        stopMicDetect();
+        updateDetectThresholdFromInput();
+        stopMicDetect("音検知を再準備しています");
 
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -397,11 +515,15 @@
         micSource.connect(analyser);
 
         detecting = true;
-        setVideoStatus("音検知中。歌い出しを待っています。");
+        document.getElementById("detectStatus").textContent =
+          "音検知中。しきい値 " + detectThreshold.toFixed(3) + " を超えたら再生します。";
+
         detectVolume();
 
       } catch (error) {
         alert("マイクが使えませんでした");
+        document.getElementById("detectStatus").textContent =
+          "マイク取得に失敗しました";
         console.error(error);
       }
     }
@@ -421,8 +543,8 @@
       const volume = Math.sqrt(sum / dataArray.length);
       document.getElementById("volume").textContent = volume.toFixed(3);
 
-      if (volume > threshold) {
-        stopMicDetect();
+      if (volume > detectThreshold) {
+        stopMicDetect("検知成功。保存位置から再生します。");
         playSaved();
         return;
       }
@@ -430,7 +552,7 @@
       requestAnimationFrame(detectVolume);
     }
 
-    function stopMicDetect() {
+    function stopMicDetect(message = "停止中") {
       detecting = false;
 
       if (micStream) {
@@ -442,6 +564,8 @@
         audioContext.close();
         audioContext = null;
       }
+
+      document.getElementById("detectStatus").textContent = message;
     }
 
     function saveSongInfo() {
@@ -555,11 +679,17 @@
 
         const rawSongInfo = localStorage.getItem("song_info_" + id);
         const rawSavedSec = localStorage.getItem("sync_" + id);
+        const rawDetectSettings = localStorage.getItem("detect_settings_" + id);
 
         let songInfo = {
           title: "曲名未入力",
           artist: "アーティスト未入力",
           service: "機種未選択"
+        };
+
+        let detectSettings = {
+          offset: 0.0,
+          threshold: defaultThreshold
         };
 
         if (rawSongInfo) {
@@ -575,6 +705,18 @@
           }
         }
 
+        if (rawDetectSettings) {
+          try {
+            const parsedDetectSettings = JSON.parse(rawDetectSettings);
+            detectSettings = {
+              offset: Number(parsedDetectSettings.offset) || 0.0,
+              threshold: Number(parsedDetectSettings.threshold) || defaultThreshold
+            };
+          } catch (error) {
+            // 壊れた検知設定は初期表示にする
+          }
+        }
+
         const title = document.createElement("div");
         title.className = "song-card-title";
         title.textContent = songInfo.title;
@@ -585,6 +727,12 @@
           songInfo.artist + " / " +
           songInfo.service + " / " +
           "保存位置：" + (rawSavedSec !== null ? Number(rawSavedSec).toFixed(2) + "秒" : "未保存");
+
+        const detectMeta = document.createElement("div");
+        detectMeta.className = "song-card-meta";
+        detectMeta.textContent =
+          "検知補正：" + detectSettings.offset.toFixed(2) + "秒 / " +
+          "しきい値：" + detectSettings.threshold.toFixed(3);
 
         const idText = document.createElement("div");
         idText.className = "song-card-meta";
@@ -604,6 +752,7 @@
 
         card.appendChild(title);
         card.appendChild(meta);
+        card.appendChild(detectMeta);
         card.appendChild(idText);
         card.appendChild(loadButton);
         card.appendChild(deleteButton);
@@ -621,16 +770,21 @@
 
       localStorage.removeItem("sync_" + targetVideoId);
       localStorage.removeItem("song_info_" + targetVideoId);
+      localStorage.removeItem("detect_settings_" + targetVideoId);
       removeVideoFromSongList(targetVideoId);
 
       if (videoId === targetVideoId) {
         savedSec = null;
+        detectOffsetSec = 0.0;
+        detectThreshold = defaultThreshold;
 
         document.getElementById("saved").textContent = "未保存";
         document.getElementById("songTitle").value = "";
         document.getElementById("artistName").value = "";
         document.getElementById("karaokeService").value = "";
         document.getElementById("songInfoStatus").textContent = "未保存";
+        document.getElementById("detectStatus").textContent = "検知設定は未保存です";
+        updateDetectSettingsView();
       }
 
       renderSongList();
