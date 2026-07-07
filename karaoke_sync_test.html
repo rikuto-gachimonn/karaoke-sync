@@ -3,36 +3,112 @@
 <head>
   <meta charset="UTF-8">
   <title>Karaoke Sync Test</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 760px;
+      margin: 24px auto;
+      padding: 0 16px;
+      line-height: 1.6;
+    }
+
+    h2 {
+      margin-bottom: 8px;
+    }
+
+    .section {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    input,
+    select,
+    button {
+      margin: 4px;
+      padding: 6px 8px;
+      font-size: 14px;
+    }
+
+    input {
+      min-width: 280px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    #player {
+      margin-top: 12px;
+    }
+
+    .status {
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
   <h2>Karaoke Sync Test</h2>
+  <p>カラオケ採点に合わせて、本人歌唱のYouTube動画をイヤホンで聴くための同期テストです。</p>
 
-  <input id="videoId" placeholder="YouTube動画ID">
-  <button onclick="loadVideo()">読み込み</button>
+  <div class="section">
+    <h3>動画設定</h3>
 
-  <div id="player"></div>
+    <input
+      id="videoInput"
+      placeholder="YouTube URL または 動画ID"
+    >
+    <button onclick="loadVideo()">動画を読み込む</button>
 
-  <p>現在位置：<span id="current">0.00</span>秒</p>
-  <p>保存位置：<span id="saved">未保存</span></p>
-  <p>検知補正：<span id="detectOffset">0.00</span>秒</p>
-  <p>音量：<span id="volume">0.000</span></p>
+    <p>動画ID：<span id="currentVideoId">未読み込み</span></p>
+    <p class="status">状態：<span id="videoStatus">動画未読み込み</span></p>
 
-  <button onclick="play()">再生</button>
-  <button onclick="pause()">停止</button>
-  <button onclick="seek(-0.1)">-0.1秒</button>
-  <button onclick="seek(0.1)">+0.1秒</button>
-  <button onclick="save()">今合ってる</button>
-  <button onclick="playSaved()">保存位置から再生</button>
+    <div id="player"></div>
+  </div>
 
-  <br><br>
+  <div class="section">
+    <h3>曲情報</h3>
 
-  <button onclick="changeDetectOffset(-0.1)">補正 -0.1秒</button>
-  <button onclick="changeDetectOffset(0.1)">補正 +0.1秒</button>
+    <input id="songTitle" placeholder="曲名">
+    <input id="artistName" placeholder="アーティスト名">
 
-  <br><br>
+    <select id="karaokeService">
+      <option value="">機種を選択</option>
+      <option value="DAM">DAM</option>
+      <option value="JOYSOUND">JOYSOUND</option>
+    </select>
 
-  <button onclick="startMicDetect()">音検知スタート</button>
-  <button onclick="stopMicDetect()">音検知停止</button>
+    <button onclick="saveSongInfo()">曲情報を保存</button>
+
+    <p>保存状態：<span id="songInfoStatus">未保存</span></p>
+  </div>
+
+  <div class="section">
+    <h3>同期設定</h3>
+
+    <p>現在位置：<span id="current">0.00</span>秒</p>
+    <p>保存位置：<span id="saved">未保存</span></p>
+    <p>検知補正：<span id="detectOffset">0.00</span>秒</p>
+    <p>音量：<span id="volume">0.000</span></p>
+
+    <button onclick="play()">再生</button>
+    <button onclick="pause()">停止</button>
+    <button onclick="seek(-0.1)">-0.1秒</button>
+    <button onclick="seek(0.1)">+0.1秒</button>
+    <button onclick="save()">今合ってる</button>
+    <button onclick="playSaved()">保存位置から再生</button>
+
+    <br><br>
+
+    <button onclick="changeDetectOffset(-0.1)">補正 -0.1秒</button>
+    <button onclick="changeDetectOffset(0.1)">補正 +0.1秒</button>
+
+    <br><br>
+
+    <button onclick="startMicDetect()">音検知スタート</button>
+    <button onclick="stopMicDetect()">音検知停止</button>
+  </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script>
@@ -44,6 +120,7 @@
     let audioContext;
     let analyser;
     let micSource;
+    let micStream;
     let dataArray;
     let detecting = false;
 
@@ -56,36 +133,154 @@
         videoId: "",
         playerVars: {
           playsinline: 1
+        },
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+          onError: onPlayerError
         }
       });
 
       setInterval(updateCurrentTime, 100);
     }
 
-    function loadVideo() {
-      videoId = document.getElementById("videoId").value.trim();
+    function onPlayerReady() {
+      setVideoStatus("YouTubeプレイヤー準備完了");
+    }
 
-      if (!videoId) {
-        alert("YouTube動画IDを入力してね");
+    function onPlayerStateChange(event) {
+      if (!videoId) return;
+
+      if (event.data === YT.PlayerState.PLAYING) {
+        setVideoStatus("再生中");
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        setVideoStatus("一時停止中");
+      } else if (event.data === YT.PlayerState.ENDED) {
+        setVideoStatus("再生終了");
+      } else if (event.data === YT.PlayerState.CUED) {
+        setVideoStatus("動画を読み込みました。再生できます。");
+      }
+    }
+
+    function onPlayerError(event) {
+      if (event.data === 2) {
+        setVideoStatus("動画IDが正しくありません。URLを確認してください。");
+      } else if (event.data === 5) {
+        setVideoStatus("この動画はHTML5プレイヤーで再生できません。");
+      } else if (event.data === 100) {
+        setVideoStatus("動画が見つかりません。削除または非公開の可能性があります。");
+      } else if (event.data === 101 || event.data === 150) {
+        setVideoStatus("この動画は埋め込み再生できません。別の動画を選んでください。");
+      } else {
+        setVideoStatus("再生エラーが発生しました。エラーコード：" + event.data);
+      }
+    }
+
+    function extractYouTubeVideoId(input) {
+      const text = input.trim();
+
+      if (/^[a-zA-Z0-9_-]{11}$/.test(text)) {
+        return text;
+      }
+
+      try {
+        const url = new URL(text);
+        const hostname = url.hostname.replace("www.", "");
+
+        if (hostname === "youtu.be") {
+          const id = url.pathname.split("/").filter(Boolean)[0];
+          return isValidVideoId(id) ? id : null;
+        }
+
+        if (hostname.endsWith("youtube.com")) {
+          const watchId = url.searchParams.get("v");
+
+          if (isValidVideoId(watchId)) {
+            return watchId;
+          }
+
+          const parts = url.pathname.split("/").filter(Boolean);
+          const targetPaths = ["embed", "shorts", "live"];
+
+          for (const targetPath of targetPaths) {
+            const index = parts.indexOf(targetPath);
+
+            if (index !== -1) {
+              const id = parts[index + 1];
+              return isValidVideoId(id) ? id : null;
+            }
+          }
+        }
+      } catch (error) {
+        // URLではない入力の場合は、下の正規表現で判定する
+      }
+
+      const match = text.match(/([a-zA-Z0-9_-]{11})/);
+      return match ? match[1] : null;
+    }
+
+    function isValidVideoId(id) {
+      return typeof id === "string" && /^[a-zA-Z0-9_-]{11}$/.test(id);
+    }
+
+    function loadVideo() {
+      const input = document.getElementById("videoInput").value;
+      const extractedVideoId = extractYouTubeVideoId(input);
+
+      if (!extractedVideoId) {
+        alert("YouTube URLまたは動画IDを正しく入力してね");
         return;
       }
 
+      if (!player || typeof player.loadVideoById !== "function") {
+        alert("YouTubeプレイヤーの準備がまだできていません。少し待ってから試してね");
+        return;
+      }
+
+      videoId = extractedVideoId;
+
+      document.getElementById("currentVideoId").textContent = videoId;
+      setVideoStatus("動画を読み込み中：" + videoId);
+
       player.loadVideoById(videoId);
 
+      loadSavedPosition();
+      loadSongInfo();
+    }
+
+    function loadSavedPosition() {
+      if (!videoId) return;
+
       savedSec = localStorage.getItem("sync_" + videoId);
+
       document.getElementById("saved").textContent =
         savedSec !== null ? Number(savedSec).toFixed(2) + "秒" : "未保存";
     }
 
     function play() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
       player.playVideo();
     }
 
     function pause() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
       player.pauseVideo();
     }
 
     function seek(diff) {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
       const t = player.getCurrentTime();
       player.seekTo(Math.max(0, t + diff), true);
     }
@@ -104,6 +299,11 @@
     }
 
     function playSaved() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
       if (savedSec === null) {
         alert("先に保存位置を作ってね");
         return;
@@ -118,8 +318,12 @@
     function updateCurrentTime() {
       if (!player || typeof player.getCurrentTime !== "function") return;
 
-      document.getElementById("current").textContent =
-        player.getCurrentTime().toFixed(2);
+      try {
+        document.getElementById("current").textContent =
+          player.getCurrentTime().toFixed(2);
+      } catch (error) {
+        // プレイヤー準備前は何もしない
+      }
     }
 
     function changeDetectOffset(diff) {
@@ -130,17 +334,24 @@
     }
 
     async function startMicDetect() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
       if (savedSec === null) {
         alert("先に保存位置を作ってね");
         return;
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stopMicDetect();
 
-        audioContext = new AudioContext();
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        micSource = audioContext.createMediaStreamSource(stream);
+        micSource = audioContext.createMediaStreamSource(micStream);
 
         analyser.fftSize = 2048;
         dataArray = new Uint8Array(analyser.fftSize);
@@ -148,6 +359,7 @@
         micSource.connect(analyser);
 
         detecting = true;
+        setVideoStatus("音検知中。歌い出しを待っています。");
         detectVolume();
 
       } catch (error) {
@@ -172,7 +384,7 @@
       document.getElementById("volume").textContent = volume.toFixed(3);
 
       if (volume > threshold) {
-        detecting = false;
+        stopMicDetect();
         playSaved();
         return;
       }
@@ -182,6 +394,75 @@
 
     function stopMicDetect() {
       detecting = false;
+
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+    }
+
+    function saveSongInfo() {
+      if (!videoId) {
+        alert("先に動画を読み込んでね");
+        return;
+      }
+
+      const songInfo = {
+        title: document.getElementById("songTitle").value.trim(),
+        artist: document.getElementById("artistName").value.trim(),
+        service: document.getElementById("karaokeService").value
+      };
+
+      localStorage.setItem("song_info_" + videoId, JSON.stringify(songInfo));
+
+      document.getElementById("songInfoStatus").textContent =
+        "保存済み：" + formatSongInfo(songInfo);
+    }
+
+    function loadSongInfo() {
+      if (!videoId) return;
+
+      const rawSongInfo = localStorage.getItem("song_info_" + videoId);
+
+      if (!rawSongInfo) {
+        document.getElementById("songTitle").value = "";
+        document.getElementById("artistName").value = "";
+        document.getElementById("karaokeService").value = "";
+        document.getElementById("songInfoStatus").textContent = "未保存";
+        return;
+      }
+
+      try {
+        const songInfo = JSON.parse(rawSongInfo);
+
+        document.getElementById("songTitle").value = songInfo.title || "";
+        document.getElementById("artistName").value = songInfo.artist || "";
+        document.getElementById("karaokeService").value = songInfo.service || "";
+
+        document.getElementById("songInfoStatus").textContent =
+          "読み込み済み：" + formatSongInfo(songInfo);
+
+      } catch (error) {
+        document.getElementById("songInfoStatus").textContent =
+          "曲情報の読み込みに失敗しました";
+      }
+    }
+
+    function formatSongInfo(songInfo) {
+      const title = songInfo.title || "曲名未入力";
+      const artist = songInfo.artist || "アーティスト未入力";
+      const service = songInfo.service || "機種未選択";
+
+      return title + " / " + artist + " / " + service;
+    }
+
+    function setVideoStatus(message) {
+      document.getElementById("videoStatus").textContent = message;
     }
   </script>
 </body>
