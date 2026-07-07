@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: sans-serif;
-      max-width: 760px;
+      max-width: 820px;
       margin: 24px auto;
       padding: 0 16px;
       line-height: 1.6;
@@ -52,12 +52,29 @@
       font-weight: bold;
     }
 
+    .list-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .list-controls input {
+      min-width: 260px;
+    }
+
     .song-card {
       border: 1px solid #ddd;
       border-radius: 6px;
       padding: 10px;
       margin: 8px 0;
       background: #fafafa;
+    }
+
+    .song-card.active-song {
+      border: 2px solid #333;
+      background: #f0f8ff;
     }
 
     .song-card-title {
@@ -70,8 +87,27 @@
       color: #555;
     }
 
+    .song-card-actions {
+      margin-top: 6px;
+    }
+
     .empty-message {
       color: #777;
+    }
+
+    .count-text {
+      font-size: 14px;
+      color: #555;
+    }
+
+    .active-label {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 6px;
+      margin-left: 6px;
+      border-radius: 999px;
+      background: #333;
+      color: white;
     }
   </style>
 </head>
@@ -113,7 +149,27 @@
 
   <div class="section">
     <h3>保存済み曲リスト</h3>
-    <button onclick="renderSongList()">曲リストを更新</button>
+
+    <div class="list-controls">
+      <input
+        id="songSearchInput"
+        placeholder="曲名・アーティスト・機種・動画IDで検索"
+        oninput="renderSongList()"
+      >
+
+      <select id="songSortSelect" onchange="renderSongList()">
+        <option value="newest">新しい順</option>
+        <option value="title">曲名順</option>
+        <option value="artist">アーティスト順</option>
+        <option value="service">機種順</option>
+      </select>
+
+      <button onclick="clearSongSearch()">検索クリア</button>
+      <button onclick="renderSongList()">曲リストを更新</button>
+    </div>
+
+    <p class="count-text">表示件数：<span id="songListCount">0</span>件</p>
+
     <div id="songList"></div>
   </div>
 
@@ -310,6 +366,7 @@
       loadSavedPosition();
       loadSongInfo();
       loadDetectSettings();
+      renderSongList();
     }
 
     function loadVideoFromList(selectedVideoId) {
@@ -646,12 +703,9 @@
     }
 
     function addVideoToSongList(targetVideoId) {
-      const list = getSongList();
-
-      if (!list.includes(targetVideoId)) {
-        list.unshift(targetVideoId);
-        saveSongList(list);
-      }
+      const list = getSongList().filter(id => id !== targetVideoId);
+      list.unshift(targetVideoId);
+      saveSongList(list);
     }
 
     function removeVideoFromSongList(targetVideoId) {
@@ -659,103 +713,167 @@
       saveSongList(list);
     }
 
+    function clearSongSearch() {
+      document.getElementById("songSearchInput").value = "";
+      document.getElementById("songSortSelect").value = "newest";
+      renderSongList();
+    }
+
+    function getSongDisplayData(id) {
+      const rawSongInfo = localStorage.getItem("song_info_" + id);
+      const rawSavedSec = localStorage.getItem("sync_" + id);
+      const rawDetectSettings = localStorage.getItem("detect_settings_" + id);
+
+      let songInfo = {
+        title: "曲名未入力",
+        artist: "アーティスト未入力",
+        service: "機種未選択"
+      };
+
+      let detectSettings = {
+        offset: 0.0,
+        threshold: defaultThreshold
+      };
+
+      if (rawSongInfo) {
+        try {
+          const parsedSongInfo = JSON.parse(rawSongInfo);
+          songInfo = {
+            title: parsedSongInfo.title || "曲名未入力",
+            artist: parsedSongInfo.artist || "アーティスト未入力",
+            service: parsedSongInfo.service || "機種未選択"
+          };
+        } catch (error) {
+          // 壊れた曲情報は初期表示にする
+        }
+      }
+
+      if (rawDetectSettings) {
+        try {
+          const parsedDetectSettings = JSON.parse(rawDetectSettings);
+          detectSettings = {
+            offset: Number(parsedDetectSettings.offset) || 0.0,
+            threshold: Number(parsedDetectSettings.threshold) || defaultThreshold
+          };
+        } catch (error) {
+          // 壊れた検知設定は初期表示にする
+        }
+      }
+
+      return {
+        id: id,
+        title: songInfo.title,
+        artist: songInfo.artist,
+        service: songInfo.service,
+        savedSec: rawSavedSec,
+        offset: detectSettings.offset,
+        threshold: detectSettings.threshold
+      };
+    }
+
+    function getFilteredAndSortedSongDataList() {
+      const searchText = document.getElementById("songSearchInput").value.trim().toLowerCase();
+      const sortType = document.getElementById("songSortSelect").value;
+
+      const dataList = getSongList().map(id => getSongDisplayData(id));
+
+      const filteredList = dataList.filter(item => {
+        const searchTarget = [
+          item.title,
+          item.artist,
+          item.service,
+          item.id
+        ].join(" ").toLowerCase();
+
+        return searchTarget.includes(searchText);
+      });
+
+      if (sortType === "title") {
+        filteredList.sort((a, b) => a.title.localeCompare(b.title, "ja"));
+      } else if (sortType === "artist") {
+        filteredList.sort((a, b) => a.artist.localeCompare(b.artist, "ja"));
+      } else if (sortType === "service") {
+        filteredList.sort((a, b) => a.service.localeCompare(b.service, "ja"));
+      }
+
+      return filteredList;
+    }
+
     function renderSongList() {
       const songListElement = document.getElementById("songList");
       songListElement.innerHTML = "";
 
-      const list = getSongList();
+      const filteredList = getFilteredAndSortedSongDataList();
 
-      if (list.length === 0) {
+      document.getElementById("songListCount").textContent = filteredList.length;
+
+      if (filteredList.length === 0) {
         const emptyMessage = document.createElement("p");
         emptyMessage.className = "empty-message";
-        emptyMessage.textContent = "保存済みの曲はまだありません。";
+        emptyMessage.textContent = "条件に合う保存済み曲はありません。";
         songListElement.appendChild(emptyMessage);
         return;
       }
 
-      for (const id of list) {
+      for (const item of filteredList) {
         const card = document.createElement("div");
         card.className = "song-card";
 
-        const rawSongInfo = localStorage.getItem("song_info_" + id);
-        const rawSavedSec = localStorage.getItem("sync_" + id);
-        const rawDetectSettings = localStorage.getItem("detect_settings_" + id);
-
-        let songInfo = {
-          title: "曲名未入力",
-          artist: "アーティスト未入力",
-          service: "機種未選択"
-        };
-
-        let detectSettings = {
-          offset: 0.0,
-          threshold: defaultThreshold
-        };
-
-        if (rawSongInfo) {
-          try {
-            const parsedSongInfo = JSON.parse(rawSongInfo);
-            songInfo = {
-              title: parsedSongInfo.title || "曲名未入力",
-              artist: parsedSongInfo.artist || "アーティスト未入力",
-              service: parsedSongInfo.service || "機種未選択"
-            };
-          } catch (error) {
-            // 壊れた曲情報は初期表示にする
-          }
-        }
-
-        if (rawDetectSettings) {
-          try {
-            const parsedDetectSettings = JSON.parse(rawDetectSettings);
-            detectSettings = {
-              offset: Number(parsedDetectSettings.offset) || 0.0,
-              threshold: Number(parsedDetectSettings.threshold) || defaultThreshold
-            };
-          } catch (error) {
-            // 壊れた検知設定は初期表示にする
-          }
+        if (item.id === videoId) {
+          card.classList.add("active-song");
         }
 
         const title = document.createElement("div");
         title.className = "song-card-title";
-        title.textContent = songInfo.title;
+        title.textContent = item.title;
+
+        if (item.id === videoId) {
+          const activeLabel = document.createElement("span");
+          activeLabel.className = "active-label";
+          activeLabel.textContent = "読み込み中";
+          title.appendChild(activeLabel);
+        }
 
         const meta = document.createElement("div");
         meta.className = "song-card-meta";
         meta.textContent =
-          songInfo.artist + " / " +
-          songInfo.service + " / " +
-          "保存位置：" + (rawSavedSec !== null ? Number(rawSavedSec).toFixed(2) + "秒" : "未保存");
+          item.artist + " / " +
+          item.service + " / " +
+          "保存位置：" + (item.savedSec !== null ? Number(item.savedSec).toFixed(2) + "秒" : "未保存");
 
         const detectMeta = document.createElement("div");
         detectMeta.className = "song-card-meta";
         detectMeta.textContent =
-          "検知補正：" + detectSettings.offset.toFixed(2) + "秒 / " +
-          "しきい値：" + detectSettings.threshold.toFixed(3);
+          "検知補正：" + item.offset.toFixed(2) + "秒 / " +
+          "しきい値：" + item.threshold.toFixed(3);
 
         const idText = document.createElement("div");
         idText.className = "song-card-meta";
-        idText.textContent = "動画ID：" + id;
+        idText.textContent = "動画ID：" + item.id;
+
+        const actions = document.createElement("div");
+        actions.className = "song-card-actions";
 
         const loadButton = document.createElement("button");
         loadButton.textContent = "読み込み";
         loadButton.onclick = function() {
-          loadVideoFromList(id);
+          loadVideoFromList(item.id);
         };
 
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "削除";
         deleteButton.onclick = function() {
-          deleteSongData(id);
+          deleteSongData(item.id);
         };
+
+        actions.appendChild(loadButton);
+        actions.appendChild(deleteButton);
 
         card.appendChild(title);
         card.appendChild(meta);
         card.appendChild(detectMeta);
         card.appendChild(idText);
-        card.appendChild(loadButton);
-        card.appendChild(deleteButton);
+        card.appendChild(actions);
 
         songListElement.appendChild(card);
       }
@@ -774,10 +892,13 @@
       removeVideoFromSongList(targetVideoId);
 
       if (videoId === targetVideoId) {
+        videoId = "";
         savedSec = null;
         detectOffsetSec = 0.0;
         detectThreshold = defaultThreshold;
 
+        document.getElementById("videoInput").value = "";
+        document.getElementById("currentVideoId").textContent = "未読み込み";
         document.getElementById("saved").textContent = "未保存";
         document.getElementById("songTitle").value = "";
         document.getElementById("artistName").value = "";
