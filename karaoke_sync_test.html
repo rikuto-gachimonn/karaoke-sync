@@ -562,7 +562,33 @@
         updateDetectThresholdFromInput();
         stopMicDetect("音検知を再準備しています");
 
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+// iPhone + Bluetoothイヤホン向け：録音と再生を同時利用する設定を試す
+if ("audioSession" in navigator) {
+  try {
+    navigator.audioSession.type = "play-and-record";
+    console.log("audioSession before mic:", navigator.audioSession.type);
+  } catch (e) {
+    console.log("audioSession setting failed before mic:", e);
+  }
+}
+
+micStream = await navigator.mediaDevices.getUserMedia({
+  audio: {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false
+  }
+});
+
+// マイク取得後にも再設定して、出力先が戻るか確認する
+if ("audioSession" in navigator) {
+  try {
+    navigator.audioSession.type = "play-and-record";
+    console.log("audioSession after mic:", navigator.audioSession.type);
+  } catch (e) {
+    console.log("audioSession setting failed after mic:", e);
+  }
+}
 
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
