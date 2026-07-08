@@ -429,23 +429,22 @@
       renderSongList();
     }
 
-    function playSaved() {
-      if (!videoId) {
-        alert("先に動画を読み込んでね");
-        return;
-      }
+function playSaved() {
+  if (!videoId) {
+    alert("先に動画を読み込んでね");
+    return;
+  }
 
-      if (savedSec === null) {
-        alert("先に保存位置を作ってね");
-        return;
-      }
+  if (savedSec === null) {
+    alert("先に保存位置を作ってね");
+    return;
+  }
 
-      const startSec = Math.max(0, Number(savedSec) + detectOffsetSec);
+  const startSec = Math.max(0, Number(savedSec) + detectOffsetSec);
 
-player.seekTo(startSec, true);
-// player.playVideo(); // 自動再生を防ぐため停止
-player.pauseVideo();
-    }
+  player.seekTo(startSec, true);
+  player.playVideo();
+}
 
     function updateCurrentTime() {
       if (!player || typeof player.getCurrentTime !== "function") return;
@@ -629,11 +628,11 @@ if ("audioSession" in navigator) {
       const volume = Math.sqrt(sum / dataArray.length);
       document.getElementById("volume").textContent = volume.toFixed(3);
 
-      if (volume > detectThreshold) {
-        stopMicDetect("検知成功。保存位置から再生します。");
-        playSaved();
-        return;
-      }
+if (volume > detectThreshold) {
+  stopMicDetect("検知成功。保存位置から再生します。");
+  playSaved();
+  return;
+}
 
       requestAnimationFrame(detectVolume);
     }
