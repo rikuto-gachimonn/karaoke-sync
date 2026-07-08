@@ -363,7 +363,7 @@
       document.getElementById("currentVideoId").textContent = videoId;
       setVideoStatus("動画を読み込み中：" + videoId);
 
-      player.loadVideoById(videoId);
+    player.cueVideoById(videoId);
 
       loadSavedPosition();
       loadSongInfo();
@@ -442,8 +442,9 @@
 
       const startSec = Math.max(0, Number(savedSec) + detectOffsetSec);
 
-      player.seekTo(startSec, true);
-      player.playVideo();
+player.seekTo(startSec, true);
+// player.playVideo(); // 自動再生を防ぐため停止
+player.pauseVideo();
     }
 
     function updateCurrentTime() {
