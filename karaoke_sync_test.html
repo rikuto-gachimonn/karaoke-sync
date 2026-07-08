@@ -413,21 +413,30 @@
       player.seekTo(Math.max(0, t + diff), true);
     }
 
-    function save() {
-      if (!videoId) {
-        alert("先に動画を読み込んでね");
-        return;
-      }
+function save() {
+  let activeVideoId = videoId;
 
-      savedSec = player.getCurrentTime();
-      localStorage.setItem("sync_" + videoId, savedSec);
-      addVideoToSongList(videoId);
+  if (!activeVideoId) {
+    activeVideoId = extractYouTubeVideoId(document.getElementById("videoInput").value);
+  }
 
-      document.getElementById("saved").textContent =
-        Number(savedSec).toFixed(2) + "秒";
+  if (!activeVideoId) {
+    alert("先に動画を読み込んでね");
+    return;
+  }
 
-      renderSongList();
-    }
+  videoId = activeVideoId;
+  document.getElementById("currentVideoId").textContent = videoId;
+
+  savedSec = player.getCurrentTime();
+  localStorage.setItem("sync_" + videoId, savedSec);
+  addVideoToSongList(videoId);
+
+  document.getElementById("saved").textContent =
+    Number(savedSec).toFixed(2) + "秒";
+
+  renderSongList();
+}
 
 function playSaved() {
   if (!videoId) {
@@ -445,6 +454,26 @@ function playSaved() {
   player.seekTo(startSec, true);
   player.playVideo();
 }
+
+function getSavedStartSec() {
+  return Math.max(0, Number(savedSec) + detectOffsetSec);
+}
+
+function prepareSavedPosition() {
+  if (!videoId || savedSec === null) return;
+
+  const startSec = getSavedStartSec();
+
+  player.cueVideoById({
+    videoId: videoId,
+    startSeconds: startSec
+  });
+
+  document.getElementById("detectStatus").textContent =
+    "保存位置で待機中。音を検知したら再生します。";
+}
+
+
 
     function updateCurrentTime() {
       if (!player || typeof player.getCurrentTime !== "function") return;
@@ -599,6 +628,8 @@ if ("audioSession" in navigator) {
 
         micSource.connect(analyser);
 
+        prepareSavedPosition();
+
         detecting = true;
         document.getElementById("detectStatus").textContent =
           "音検知中。しきい値 " + detectThreshold.toFixed(3) + " を超えたら再生します。";
@@ -629,8 +660,12 @@ if ("audioSession" in navigator) {
       document.getElementById("volume").textContent = volume.toFixed(3);
 
 if (volume > detectThreshold) {
-  stopMicDetect("検知成功。保存位置から再生します。");
-  playSaved();
+  detecting = false;
+
+  document.getElementById("detectStatus").textContent =
+    "検知成功。準備済み位置から再生します。";
+
+  player.playVideo();
   return;
 }
 
