@@ -1,0 +1,33 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TitleAutofill } from '../src/library/titleAutofill';
+import { fetchYouTubeTitle } from '../src/youtube/title';
+const a='wVYBpKEVLxQ', b='M7lc1UVf-VE';
+const flush=()=>vi.advanceTimersByTimeAsync(650);
+function pending<T>(){let resolve!:(v:T)=>void;let reject!:(e:Error)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
+beforeEach(()=>vi.useFakeTimers());afterEach(()=>vi.useRealTimers());
+describe('タイトル自動入力の所有権と競合',()=>{
+ it('650ms待ち、同じIDの共有パラメータ変更では再取得しない',async()=>{const apply=vi.fn(),load=vi.fn().mockResolvedValue('Artist - Song (Official MV)');const form=new TitleAutofill(apply,load);form.referenceChanged(a);await vi.advanceTimersByTimeAsync(649);expect(load).not.toHaveBeenCalled();await vi.advanceTimersByTimeAsync(1);expect(apply).toHaveBeenCalledWith('Artist - Song (Official MV)');form.referenceChanged('https://youtu.be/'+a+'?si=test');await flush();expect(load).toHaveBeenCalledTimes(1);expect(form.getSnapshot().status).toBe('success');});
+ it('不正入力では通信しない',async()=>{const load=vi.fn();const form=new TitleAutofill(vi.fn(),load);form.referenceChanged('https://youtube.com.evil.example/watch?v='+a);await flush();expect(load).not.toHaveBeenCalled();});
+ it('毎文字の通信をせず最後の入力だけ取得する',async()=>{const load=vi.fn().mockResolvedValue('B');const form=new TitleAutofill(vi.fn(),load);form.referenceChanged(a);await vi.advanceTimersByTimeAsync(400);form.referenceChanged(b);await flush();expect(load).toHaveBeenCalledTimes(1);expect(load.mock.calls[0]![0]).toBe(b);});
+ it('手入力がある場合は自動上書きしない',async()=>{const apply=vi.fn(),load=vi.fn();const form=new TitleAutofill(apply,load);form.manual('自分の曲名');form.referenceChanged(a);await flush();expect(load).not.toHaveBeenCalled();expect(apply).toHaveBeenLastCalledWith('自分の曲名');});
+ it('取得中の手動編集は遅着した結果より優先する',async()=>{const wait=pending<string>(),apply=vi.fn();const form=new TitleAutofill(apply,()=>wait.promise);form.referenceChanged(a);await flush();form.manual('編集');wait.resolve('遅着');await flush();expect(apply).toHaveBeenCalledTimes(1);expect(apply).toHaveBeenLastCalledWith('編集');});
+ it.each(['resolve','reject'] as const)('古い動画の%sは新しい動画へ反映しない',async action=>{const old=pending<string>(),apply=vi.fn();const load=vi.fn().mockImplementationOnce(()=>old.promise).mockResolvedValue('新動画');const form=new TitleAutofill(apply,load);form.referenceChanged(a);await flush();form.referenceChanged(b);await flush();if(action==='resolve')old.resolve('旧動画');else old.reject(new Error('古い失敗'));await flush();expect(apply).toHaveBeenLastCalledWith('新動画');expect(form.getSnapshot().status).toBe('success');});
+ it('自動入力だけは動画変更時に消して再取得する',async()=>{const apply=vi.fn();const form=new TitleAutofill(apply,async id=>id);form.referenceChanged(a);await flush();form.referenceChanged(b);expect(apply).toHaveBeenLastCalledWith('');await flush();expect(apply).toHaveBeenLastCalledWith(b);});
+ it('失敗後も手入力と再取得ができる',async()=>{const apply=vi.fn(),load=vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue('再取得');const form=new TitleAutofill(apply,load);form.referenceChanged(a);await flush();expect(form.getSnapshot().message).toContain('手入力');form.manual('手動登録可能');form.retry(a,()=>true);await flush();expect(apply).toHaveBeenLastCalledWith('再取得');});
+ it('既存曲の動画を変えても自動取得しない',async()=>{const apply=vi.fn(),load=vi.fn();const form=new TitleAutofill(apply,load);form.reset('保存済み',true,a);form.referenceChanged(b);await flush();expect(load).not.toHaveBeenCalled();expect(apply).not.toHaveBeenCalled();});
+ it('既存曲の再取得は確認取消で変更しない',async()=>{const load=vi.fn();const form=new TitleAutofill(vi.fn(),load);form.reset('保存済み',true,a);const confirm=vi.fn(()=>false);form.retry(a,confirm);await flush();expect(confirm).toHaveBeenCalledTimes(1);expect(load).not.toHaveBeenCalled();});
+ it('既存曲は明示確認した場合だけ入力欄へ反映する',async()=>{const apply=vi.fn();const form=new TitleAutofill(apply,async()=>'取得名');form.reset('保存済み',true,a);form.retry(a,()=>true);await flush();expect(apply).toHaveBeenLastCalledWith('取得名');});
+ it('再取得の確認後でも手入力を優先する',async()=>{const wait=pending<string>(),apply=vi.fn();const form=new TitleAutofill(apply,()=>wait.promise);form.reset('保存済み',true,a);form.retry(a,()=>true);form.manual('最新入力');wait.resolve('取得名');await flush();expect(apply).toHaveBeenLastCalledWith('最新入力');});
+ it.each(['cancel','reset'] as const)('%s後に遅着しても入力しない',async action=>{const wait=pending<string>(),apply=vi.fn();const form=new TitleAutofill(apply,()=>wait.promise);form.referenceChanged(a);await flush();form[action]();wait.resolve('遅着');await flush();expect(apply).not.toHaveBeenCalled();});
+ it('空欄へ手動編集した場合も勝手に埋めない',async()=>{const load=vi.fn();const form=new TitleAutofill(vi.fn(),load);form.manual('');form.referenceChanged(a);await flush();expect(load).not.toHaveBeenCalled();});
+});
+describe('公式oEmbed取得',()=>{
+ it('標準URL・CORS・認証情報なしで取得しタイトルを加工しない',async()=>{const request=vi.fn().mockResolvedValue(new Response(JSON.stringify({title:' Artist (Official MV) '})));expect(await fetchYouTubeTitle(a,undefined,request)).toBe(' Artist (Official MV) ');const [url,options]=request.mock.calls[0]!;expect(url.origin).toBe('https://www.youtube.com');expect(url.pathname).toBe('/oembed');expect(url.searchParams.get('url')).toBe('https://www.youtube.com/watch?v='+a);expect(options).toMatchObject({mode:'cors',credentials:'omit',referrerPolicy:'no-referrer'});});
+ it('不正IDでは通信しない',async()=>{const request=vi.fn();await expect(fetchYouTubeTitle('bad',undefined,request)).rejects.toThrow();expect(request).not.toHaveBeenCalled();});
+ it.each([403,404,429,500])('HTTP %sは失敗として扱う',async status=>{await expect(fetchYouTubeTitle(a,undefined,vi.fn().mockResolvedValue(new Response('',{status})))).rejects.toThrow();});
+ it.each([{}, {title:''},{title:123},{title:'x'.repeat(201)}])('不正レスポンス %j を保存しない',async body=>{await expect(fetchYouTubeTitle(a,undefined,vi.fn().mockResolvedValue(new Response(JSON.stringify(body))))).rejects.toThrow();});
+ it('ネットワーク失敗を通知する',async()=>{await expect(fetchYouTubeTitle(a,undefined,vi.fn().mockRejectedValue(new TypeError('CORS')))).rejects.toThrow();});
+ it('abort無視の通信でも8秒で終了する',async()=>{const result=fetchYouTubeTitle(a,undefined,vi.fn(()=>new Promise<Response>(()=>{})));const assertion=expect(result).rejects.toThrow();await vi.advanceTimersByTimeAsync(8000);await assertion;});
+ it('停止時に通信を中断する',async()=>{const abort=new AbortController();const result=fetchYouTubeTitle(a,abort.signal,vi.fn(()=>new Promise<Response>(()=>{})));const assertion=expect(result).rejects.toThrow();abort.abort();await assertion;});
+});
+
