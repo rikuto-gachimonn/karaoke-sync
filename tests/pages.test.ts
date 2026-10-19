@@ -3,11 +3,11 @@ import { allowedArtifactPath, inspectArtifact, secretRules, staticResponse } fro
 const fixture=()=>new Map([
   ['index.html','<meta name="referrer" content="strict-origin-when-cross-origin"><script src="/assets/app-abc.js"></script>'],
   ['youtube-probe.html','<script src="/assets/app-abc.js"></script>'],['assets/app-abc.js','console.log("test")'],
-  ['404.html','Not found'],['_headers','/*\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Content-Type-Options: nosniff\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-cache\n'],
+  ['karaoke_sync_test.html','legacy HTML'],['404.html','Not found'],['_headers','/*\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Content-Type-Options: nosniff\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-cache\n'],
 ]);
 describe('Pages配信物の安全な範囲と設定',()=>{
   it('既存の2ページと静的アセットを検査する',()=>expect(inspectArtifact(fixture())).toEqual([]));
-  it.each(['.env','.git/config','.local-https/server.json','README.md','tatus','karaoke_sync_test.html','backup.json','assets/app.js.map','assets/../package.json'])('配信対象外%sを拒否する',name=>expect(allowedArtifactPath(name)).toBe(false));
+  it.each(['.env','.git/config','.local-https/server.json','README.md','tatus','karaoke_sync_test.html','backup.json','assets/app.js.map','assets/../package.json'])('配信対象%sは旧HTMLのみ追加で許可する',name=>expect(allowedArtifactPath(name)).toBe(name==='karaoke_sync_test.html'));
   it('秘密鍵と代表的なキー形式は値を報告せず検出する',()=>{
     expect(secretRules('-----BEGIN PRIVATE KEY-----')).toContain('private-key');expect(secretRules('AKIA'+'A'.repeat(16))).toContain('aws-access-key');expect(secretRules('ghp_'+'A'.repeat(36))).toContain('github-token');expect(secretRules('api_key="'+'A'.repeat(20)+'"')).toContain('assigned-credential');
   });
