@@ -1,0 +1,38 @@
+{
+  "name": "karaokesync",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:iphone": "vite --mode iphone",
+    "https:setup": "node scripts/setup-local-https.mjs",
+    "https:share-ca": "node --experimental-strip-types scripts/share-ca.mjs",
+    "log:inspect": "node --experimental-strip-types scripts/analyze-log.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "pages:check": "pnpm build && node --experimental-strip-types scripts/check-pages.ts"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

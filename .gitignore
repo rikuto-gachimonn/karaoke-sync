@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.pnpm-store/
+.vite/
+coverage/
+*.tsbuildinfo
+.local-https/
+*.pem
+*.key
+*.pfx
+*.p12
