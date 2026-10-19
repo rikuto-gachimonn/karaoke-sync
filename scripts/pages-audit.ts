@@ -1,6 +1,17 @@
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
 const rootNames = new Set(['index.html','youtube-probe.html','karaoke_sync_test.html','404.html','_headers']);
+/** HTTPヘッダーに依存せず、配信HTMLのhead内のrobots指定を検査する。 */
+export function hasSearchExclusion(html:string):boolean {
+  const head=html.replace(/<!--[\s\S]*?-->/g,'').match(/<head\b[^>]*>([\s\S]*?)<\/head\s*>/i)?.[1]??'';
+  const robots=(head.match(/<meta\b[^>]*>/gi)??[]).map(tag=>{
+    const attributes=new Map([...tag.matchAll(/([\w-]+)\s*=\s*(["'])(.*?)\2/g)].map(match=>[match[1]!.toLowerCase(),match[3]!.toLowerCase()]));
+    return attributes.get('name')==='robots'?attributes.get('content'):undefined;
+  }).filter((value):value is string=>value!==undefined);
+  if(robots.length!==1)return false;
+  const directives=robots[0]!.split(/[\s,]+/);
+  return directives.includes('noindex')&&directives.includes('nofollow')&&!directives.includes('index')&&!directives.includes('follow');
+}
 export function allowedArtifactPath(name:string) {
   if(name.includes('\\')||name.split('/').some(part=>!part||part==='.'||part==='..'||part.startsWith('.')))return false;
   return rootNames.has(name)||/^assets\/[\w.-]+\.(?:js|css|svg|png|jpe?g|webp|ico|woff2?)$/.test(name);

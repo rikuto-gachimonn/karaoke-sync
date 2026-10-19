@@ -131,7 +131,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     }catch(error){setSaveMessage(String(error));}
   }
   return <main className="karaoke-app">
-    <header className="app-header"><h1>KaraokeSync</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
+    <header className="app-header"><h1>SyncLab</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
     <p className="session-notice" role="status" aria-live="polite">{state.notice}</p>
     <div className="performance-area">
       <section id="current-song" className="current-song" aria-label="選択中の曲" tabIndex={-1}>

@@ -95,3 +95,13 @@ HTTPSの通常ページから既存の公式IFrame APIを読み込む。origin�
 - tests/pages.test.ts、tests/github-pages.test.ts：共存とサブパスの回帰テスト。
 
 参照：[ViteのGitHub Pages手順](https://vite.dev/guide/static-deploy.html#github-pages)、[GitHubのカスタムワークフロー](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)、[GitHub Pagesサイトの作成と公開範囲](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site)。
+
+## 追記：URL共有によるテスト公開の方針
+
+React入口、旧HTML、検証ページ、404のheadにnoindex, nofollowを設定した。表示名はReact・旧HTML・検証ページ・404でSyncLabに統一した。旧HTMLの変更は表示名とメタ情報のみで、再生・マイク・保存処理やバックアップの識別子は変更していない。公開用ビルドでは変更後の旧HTMLをバイト列そのままで含める。
+
+robots.txtによるクロールの全面禁止は追加しない。全ビルドHTMLのメタタグを既存の成果物検査で確認する。Actionsの起動条件・ビルド・公開フローは変更していない。
+
+これは検索エンジンに検索掲載・リンク追跡の抑制を伝える指定であり、認証やアクセス制限ではない。URLの転送・共有や、指定に従わない取得を防げず、検索結果からの除外時期も保証しない。
+
+公開サイトへの反映にはmainへのマージとデプロイが必要。今回のPR更新ではマージ・デプロイ・Pages設定変更は行わない。検証結果：646テスト成功、型検査・本番ビルド成功、ビルド後の全4 HTMLでnoindex, nofollowを確認。
