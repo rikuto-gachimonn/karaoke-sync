@@ -1,4 +1,4 @@
-export type Phase = 'idle' | 'preparing' | 'preplay' | 'prepausing' | 'manualReady' | 'armed' | 'waiting' | 'starting' | 'buffering' | 'playing' | 'paused' | 'ended' | 'stopping' | 'error';
+export type Phase = 'idle' | 'preparing' | 'preplay' | 'prepausing' | 'micReady' | 'manualReady' | 'armed' | 'waiting' | 'starting' | 'buffering' | 'playing' | 'paused' | 'ended' | 'stopping' | 'error';
 export interface SessionState {
   phase: Phase;
   generation: number;

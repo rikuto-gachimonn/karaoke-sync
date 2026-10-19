@@ -4,7 +4,7 @@ import { LeaseReleaser } from './leaseReleaser';
 import { DiagnosticLog } from '../diagnostics/log';
 import { playbackPlan, startPosition, selectedTrigger, validateInput, type SyncInput } from '../domain/sync';
 import type { AudioLease, Detector, Player, PlayerEvent, SessionDependencies, Unsubscribe } from './ports';
-import { AudioAcquireError } from './ports';
+import { AudioAcquireError, AudioStartError } from './ports';
 import { trialExport, type TriggerTrial } from '../diagnostics/trials';
 import { initialState, sessionReducer, type Phase, type SessionState } from './state';
 import { correctedPosition } from '../youtube-probe/compensation';
@@ -146,7 +146,11 @@ export class SessionController {
     context.acquiring = true;
     this.log.add(generation, 'mic.acquire');
     // 取得そのものはキャンセルできない契約。停止後の遅着leaseも必ず回収する。
-    const acquire = Promise.resolve().then(() => this.dependencies.audio.acquire(context.acquisitionAbort.signal)).then(async lease => {
+    // 再試行ボタンのユーザー操作内でAudioContext生成・resumeまで同期的に進める。
+    let acquisition: Promise<AudioLease>;
+    try { acquisition = this.dependencies.audio.acquire(context.acquisitionAbort.signal); }
+    catch (error) { acquisition = Promise.reject(error); }
+    const acquire = acquisition.then(async lease => {
       context.acquiring = false;
       context.lease = lease;
       context.trial.microphoneUsed = true;
@@ -219,7 +223,29 @@ export class SessionController {
       this.log.add(context.generation, 'preplay.paused');
       this.update({ phase: 'preparing', mic: selectedTrigger(context.input)==='manual'?'off':'acquiring', message: selectedTrigger(context.input)==='manual'?'動画の一時停止を確認。手動開始を準備中':'動画の一時停止を確認。マイクを取得して検知準備中' });
       await this.armSession(context, context.input, true);
-    } catch (error) { if (this.valid(context)) await this.finish(context, 'error', errorText(error)); }
+    } catch (error) { await this.handlePreplayPreparationError(context, error); }
+  }
+  private async handlePreplayPreparationError(context: Context, error: unknown): Promise<void> {
+    if (!this.valid(context)) return;
+    if (error instanceof AudioStartError && !context.lease && !context.acquiring) {
+      // AudioStartErrorは資源回収済みの場合だけ返される。動画の一時停止を再確認する。
+      try {
+        await this.pausePlayer(context);
+        if (!this.valid(context)) return;
+        this.log.add(context.generation, 'mic.activation.required', errorText(error));
+        this.update({ phase: 'micReady', mic: 'off', volume: 0, message: `${errorText(error)}。音検知は未開始です。「マイクを起動して検知開始」を押すか、すべて停止してください。広告の有無は判定していません` });
+        return;
+      } catch (pauseError) { error = pauseError; }
+    }
+    if (this.valid(context)) await this.finish(context, 'error', errorText(error));
+  }
+  retryMicrophone(): void {
+    const context = this.current;
+    if (!context || !this.valid(context) || this.state.phase !== 'micReady') return;
+    this.log.add(context.generation, 'mic.activation.retry', 'ページ上の操作による再取得。広告状態は不明');
+    this.update({ phase: 'preparing', mic: 'acquiring', message: '操作を受け付けました。マイクを起動中（検知は未開始）' });
+    // awaitやタイマーを挟まずadapterのresumeを呼ぶ。二重クリックはphaseで拒否する。
+    void this.armSession(context, context.input, true).catch(error => this.handlePreplayPreparationError(context, error));
   }
   manualStart(): void {
     const context=this.current;
@@ -300,11 +326,12 @@ export class SessionController {
 
   private onPlayer(context: Context, event: PlayerEvent): void {
     const received=this.log.add(context.generation, `player.${event.type}`, `request=${event.requestId ?? 'unknown'}${'message' in event ? `: ${event.message}` : ''}`);
+    this.log.add(context.generation, 'player.context', JSON.stringify({ event: event.type, phase: this.state.phase, mic: this.state.mic, advertising: 'unknown' }));
     if(event.type==='playing'&&this.valid(context)&&context.triggerConsumed&&context.desiredPlayback&&(event.requestId===undefined||event.requestId===context.requestId)&&context.trial.playingEventMs===undefined)context.trial.playingEventMs=received.timeMs;
     if (event.type === 'playing' && this.valid(context) && context.input.playbackMode === 'preplay') {
       if (this.state.phase === 'preplay') { void this.acceptPreplay(context); return; }
       if (this.state.phase === 'prepausing') return;
-      if (['preparing', 'armed', 'manualReady', 'waiting'].includes(this.state.phase)) {
+      if (['preparing', 'micReady', 'armed', 'manualReady', 'waiting'].includes(this.state.phase)) {
         const request = context.requestId;
         void this.deadline(context.player.readPlaybackState(), this.options.cleanupTimeoutMs, '想定外再生の状態確認期限超過').then(observed => {
           if (this.valid(context) && request === context.requestId && observed === 'playing') void this.finish(context, 'error', '検知前・補正待機中の想定外再生を停止しました');
@@ -579,6 +606,7 @@ export class SessionController {
 }
 
 export const phaseLabels: Record<Phase, string> = {
+  micReady: 'マイク起動の操作待ち（音検知は未開始）',
   preplay: '事前手動再生待ち', prepausing: '事前再生を自動一時停止中', waiting: '補正待機中',
   buffering: '読み込み待ち（再生未確認）',
   manualReady:'手動開始待ち',

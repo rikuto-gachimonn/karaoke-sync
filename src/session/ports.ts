@@ -31,6 +31,8 @@ export interface AudioLease {
 // acquireは停止・期限超過でも未完了のまま残り得る。取消可能とは仮定しない。
 // signalはアプリ側の初期化・部分資源回収用。getUserMediaの実取消を意味しない。
 export interface AudioInput { acquire(signal?: AbortSignal): Promise<AudioLease> }
+// 部分資源の回収成功後だけ返す。新しいユーザー操作で再取得できる起動失敗。
+export class AudioStartError extends Error {}
 // 部分取得の後始末自体が失敗した場合、controllerへ資源所有権を引き渡す。
 export class AudioAcquireError extends Error {
   constructor(message: string, readonly lease: AudioLease) { super(message); }

@@ -4,6 +4,9 @@ import type { YouTubeApi, YouTubeHandle, YouTubeOptions } from '../src/adapters/
 import { BrowserAudioInput, rms, type AudioEnvironment } from '../src/adapters/audio/microphone';
 import { AudioAcquireError, type PlayerEvent } from '../src/session/ports';
 import { settings } from '../src/config/settings';
+import { SessionController } from '../src/session/controller';
+import { SimulatedPlayer } from '../src/adapters/simulation';
+import { SustainedVolumeDetector } from '../src/domain/detector';
 
 async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
 function deferred<T>() {
@@ -128,10 +131,70 @@ function audio() {
   const diagnostic = vi.fn();
   const input = new BrowserAudioInput(environment, diagnostic);
   return { input, environment, context, source, analyser, track, stream, diagnostic, frame: () => frame?.(100),
+    running: () => { state = 'running'; contextEvents.get('statechange')?.(new Event('statechange')); },
     interrupt: () => { state = 'suspended'; contextEvents.get('statechange')?.(new Event('statechange')); } };
 }
 
 describe('Web Audio/getUserMedia adapter契約', () => {
+  it.each([0, 30_000])('動画待機%sms→PLAYING→実adapterの3秒起動失敗→直接操作で再取得する', async waitMs => {
+    const failed = audio(); failed.interrupt(); failed.context.resume.mockReturnValue(new Promise(() => {}));
+    const retry = audio(); let attempts = 0;
+    const player = new SimulatedPlayer(); const play = vi.spyOn(player, 'play');
+    const controller = new SessionController({ createPlayer: () => player, createDetector: () => new SustainedVolumeDetector(),
+      audio: { acquire: signal => (++attempts === 1 ? failed : retry).input.acquire(signal) } });
+    await controller.prepare({ videoId: 'M7lc1UVf-VE', service: 'DAM', savedPositionSec: 10, offsetSec: 0, threshold: 0.035, durationMs: 200, playbackMode: 'preplay' });
+    player.emit({ type: 'buffering' }); await vi.advanceTimersByTimeAsync(waitMs);
+    expect(attempts).toBe(0);
+    player.emit({ type: 'playing' }); await flush();
+    await vi.advanceTimersByTimeAsync(settings.audioStartTimeoutMs); await flush();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'micReady', mic: 'off' });
+    expect(failed.track.stop).toHaveBeenCalledTimes(1); expect(failed.context.close).toHaveBeenCalledTimes(1);
+    expect(play).not.toHaveBeenCalled();
+    controller.retryMicrophone(); expect(retry.context.resume).toHaveBeenCalledTimes(1);
+    await flush(); expect(controller.getSnapshot().phase).toBe('armed'); expect(play).not.toHaveBeenCalled();
+    await controller.stop(); expect(retry.track.stop).toHaveBeenCalledTimes(1);
+  });
+  it('呼出しの同期区間でresumeを要求し、マイク取得後の経路変更で再起動する', async () => {
+    const s = audio(); s.interrupt();
+    s.context.resume.mockReturnValueOnce(new Promise(() => {}));
+    s.context.resume.mockImplementationOnce(async () => { s.running(); });
+    const acquisition = s.input.acquire();
+    expect(s.context.resume).toHaveBeenCalledTimes(1);
+    const lease = await acquisition;
+    expect(s.context.resume).toHaveBeenCalledTimes(2);
+    expect(s.diagnostic).toHaveBeenCalledWith('mic.context.resume.request', expect.stringContaining('after-microphone'));
+    expect(s.diagnostic).toHaveBeenCalledWith('mic.context.start.completed', expect.stringContaining('running'));
+    await lease.release();
+  });
+
+  it('マイク取得完了から起動期限を数え、停止後のresume完了で復活しない', async () => {
+    const s = audio(); const stream = deferred<MediaStream>(); const resumed = deferred<void>();
+    s.interrupt();
+    vi.mocked(s.environment.getUserMedia).mockReturnValueOnce(stream.promise);
+    s.context.resume.mockReturnValue(resumed.promise);
+    const acquisition = s.input.acquire(); const assertion = expect(acquisition).rejects.toThrow('AudioContext起動期限');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(s.context.close).not.toHaveBeenCalled();
+    stream.resolve(s.stream); await flush();
+    await vi.advanceTimersByTimeAsync(settings.audioStartTimeoutMs - 1);
+    expect(s.context.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1); await assertion;
+    expect(s.diagnostic).toHaveBeenCalledWith('mic.context.start.timeout', expect.stringContaining('3000'));
+    expect(s.track.stop).toHaveBeenCalledTimes(1);
+    resumed.resolve(); await flush();
+    expect(s.context.close).toHaveBeenCalledTimes(1);
+    expect(s.diagnostic.mock.calls.some(([event]) => event === 'mic.context.start.completed')).toBe(false);
+  });
+
+  it('マイク取得後runningなら、取得前のresumeが未完了でも検知用leaseを返す', async () => {
+    const s = audio(); s.context.resume.mockReturnValueOnce(new Promise(() => {}));
+    const lease = await s.input.acquire();
+    expect(s.diagnostic).toHaveBeenCalledWith('mic.context.start.completed', expect.stringContaining('running'));
+    await vi.advanceTimersByTimeAsync(settings.audioStartTimeoutMs);
+    expect(s.diagnostic.mock.calls.some(([event]) => event === 'mic.context.start.timeout')).toBe(false);
+    await lease.release();
+  });
+
   it('runningを確認しRMS測定。検知購読停止後は分析を止め資源は保持できる', async () => {
     const s = audio(); const lease = await s.input.acquire(); const listener = vi.fn();
     const off = lease.subscribe(listener); s.frame();
@@ -174,7 +237,7 @@ describe('Web Audio/getUserMedia adapter契約', () => {
   });
 
   it('resume未完了にも期限を設けtrackを回収する', async () => {
-    const s = audio(); s.context.resume.mockReturnValueOnce(new Promise(() => {}));
+    const s = audio(); s.interrupt(); s.context.resume.mockReturnValue(new Promise(() => {}));
     const pending = s.input.acquire(); const assertion = expect(pending).rejects.toThrow('AudioContext起動期限');
     await vi.advanceTimersByTimeAsync(settings.cleanupTimeoutMs); await assertion;
     expect(s.track.stop).toHaveBeenCalledTimes(1);
@@ -191,7 +254,7 @@ describe('Web Audio/getUserMedia adapter契約', () => {
   });
 
   it('停止signalがresume待ちでも取得済みtrackを回収する', async () => {
-    const s = audio(); s.context.resume.mockReturnValueOnce(new Promise(() => {}));
+    const s = audio(); s.interrupt(); s.context.resume.mockReturnValue(new Promise(() => {}));
     const abort = new AbortController(); const pending = s.input.acquire(abort.signal);
     const assertion = expect(pending).rejects.toThrow('中止'); await flush(); abort.abort(); await assertion;
     expect(s.track.stop).toHaveBeenCalledTimes(1); expect(s.context.close).toHaveBeenCalledTimes(1);

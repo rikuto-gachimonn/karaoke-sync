@@ -1,6 +1,6 @@
 import { settings } from '../../config/settings';
 import type { AudioInput, AudioLease, VolumeSample } from '../../session/ports';
-import { AudioAcquireError } from '../../session/ports';
+import { AudioAcquireError, AudioStartError } from '../../session/ports';
 
 export interface AudioEnvironment {
   getUserMedia(): Promise<MediaStream>;
@@ -8,6 +8,7 @@ export interface AudioEnvironment {
   now(): number;
   requestFrame(callback: FrameRequestCallback): number;
   cancelFrame(id: number): void;
+  userActivation?(): boolean | undefined;
 }
 export type AudioDiagnostic = (event: string, detail?: string) => void;
 const browserEnvironment: AudioEnvironment = {
@@ -19,6 +20,7 @@ const browserEnvironment: AudioEnvironment = {
   now: () => performance.now(),
   requestFrame: callback => requestAnimationFrame(callback),
   cancelFrame: id => cancelAnimationFrame(id),
+  userActivation: () => navigator.userActivation?.isActive,
 };
 
 export function rms(samples: Float32Array): number {
@@ -33,10 +35,18 @@ export class BrowserAudioInput implements AudioInput {
   async acquire(signal?: AbortSignal): Promise<AudioLease> {
     if (signal?.aborted) throw new DOMException('マイク準備は取消済みです', 'AbortError');
     const context = this.environment.createContext();
+    const startedMs = this.environment.now();
+    const trace = (event: string, extra = {}) => this.diagnostic(event, JSON.stringify({ timeMs: this.environment.now(), elapsedMs: this.environment.now() - startedMs, state: context.state, ...extra }));
+    const onState = () => trace('mic.context.state');
+    context.addEventListener('statechange', onState);
+    trace('mic.context.created', { userActivation: this.environment.userActivation?.() });
     // ユーザー操作に近い時点でresumeを要求。成功や以後の動画再生許可は仮定しない。
-    let resumed: Promise<unknown>;
-    try { resumed = context.resume().then(() => null, error => error as unknown); }
-    catch (error) { resumed = Promise.resolve(error); }
+    const resume = (reason: string): Promise<unknown> => {
+      trace('mic.context.resume.request', { reason });
+      try { return context.resume().then(() => { trace('mic.context.resume.completed', { reason }); return null; }, error => { trace('mic.context.resume.failed', { reason, error: String(error) }); return error; }); }
+      catch (error) { return Promise.resolve(error); }
+    };
+    const initialResume = resume('acquire-start');
     let stream: MediaStream | undefined;
     let expired = false;
     let rejectAbort!: (error: Error) => void;
@@ -46,10 +56,12 @@ export class BrowserAudioInput implements AudioInput {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const request = Promise.resolve().then(() => {
       if (expired) throw new DOMException('マイク準備は取消済みです', 'AbortError');
+      trace('mic.gum.request');
       return this.environment.getUserMedia();
     }).then(value => {
       if (expired) { value.getTracks().forEach(track => track.stop()); this.diagnostic('mic.lateStream.stopped'); throw new Error('取得期限後のマイクを解放しました'); }
       stream = value;
+      trace('mic.gum.completed');
       return value;
     });
     let lease: BrowserAudioLease | undefined;
@@ -57,14 +69,23 @@ export class BrowserAudioInput implements AudioInput {
       await Promise.race([request, aborted, new Promise<never>((_, reject) => { timer = setTimeout(() => { expired = true; reject(new Error('マイク権限待ちの期限超過。許可画面を確認してください')); }, settings.acquireTimeoutMs); })]);
       clearTimeout(timer);
       lease = new BrowserAudioLease(stream!, context, this.environment, this.diagnostic);
-      const resumeError = await Promise.race([resumed, aborted, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('AudioContext起動期限超過')), settings.cleanupTimeoutMs); })]);
-      if (resumeError) throw resumeError;
-      if (context.state !== 'running') throw new Error(`AudioContextが稼働していません: ${context.state}`);
+      // マイク取得による音声経路変更の後にグラフを接続し、suspendedなら改めて起動する。
       lease.connect();
+      // 取得後に既にrunningなら、取得前の未完了Promiseだけを理由に失敗させない。
+      // 既に確定したresumeエラーは維持し、稼働状態の最終確認はこの後でも行う。
+      const resumed = context.state === 'running'
+        ? Promise.race([initialResume, Promise.resolve(null)])
+        : resume('after-microphone');
+      trace('mic.context.start.wait', { timeoutMs: settings.audioStartTimeoutMs });
+      const resumeError = await Promise.race([resumed, aborted, new Promise<never>((_, reject) => { timer = setTimeout(() => { trace('mic.context.start.timeout', { timeoutMs: settings.audioStartTimeoutMs }); reject(new AudioStartError('AudioContext起動期限超過（オーディオコンテキスト）。ページ上のマイク起動ボタンを押して再試行してください')); }, settings.audioStartTimeoutMs); })]);
+      if (resumeError) throw new AudioStartError(`AudioContext起動失敗: ${String(resumeError)}`);
+      if (context.state !== 'running') throw new AudioStartError(`AudioContextが稼働していません: ${context.state}。マイク起動ボタンで再試行してください`);
+      trace('mic.context.start.completed');
       const audioSettings = stream!.getAudioTracks()[0]?.getSettings();
       this.diagnostic('mic.context.running', JSON.stringify({ sampleRate: context.sampleRate, state: context.state, echoCancellation: audioSettings?.echoCancellation, noiseSuppression: audioSettings?.noiseSuppression, autoGainControl: audioSettings?.autoGainControl }));
       return lease;
     } catch (error) {
+      trace('mic.initialization.failed', { error: String(error) });
       expired = true;
       const partialLease: AudioLease = lease ?? {
         subscribe: () => { throw new Error('マイクは未初期化です'); },
@@ -73,7 +94,7 @@ export class BrowserAudioInput implements AudioInput {
       try { await partialLease.release(); }
       catch (cleanupError) { throw new AudioAcquireError(`マイク初期化失敗: ${String(error)} / 資源解放失敗: ${String(cleanupError)}`, partialLease); }
       throw error;
-    } finally { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); }
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); context.removeEventListener('statechange', onState); }
   }
 }
 
@@ -104,7 +125,11 @@ class BrowserAudioLease implements AudioLease {
   }
 
   private onEnded = () => this.interrupted?.('マイク入力が終了しました');
-  private onContextState = () => { if (!this.closed && this.context.state !== 'running') this.interrupted?.(`AudioContext中断: ${this.context.state}`); };
+  private onContextState = () => {
+    if (this.closed) return;
+    this.diagnostic('mic.context.lease.state', JSON.stringify({ timeMs: this.environment.now(), state: this.context.state }));
+    if (this.context.state !== 'running') this.interrupted?.(`AudioContext中断: ${this.context.state}`);
+  };
   onInterrupted(listener: (message: string) => void): () => void { this.interrupted = listener; return () => { this.interrupted = undefined; }; }
 
   subscribe(listener: (sample: VolumeSample) => void): () => void {

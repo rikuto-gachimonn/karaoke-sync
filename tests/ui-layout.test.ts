@@ -20,6 +20,15 @@ function button(html: string, name: string) {
 }
 
 describe('スマートフォン向けメイン画面', () => {
+  it('マイク起動の操作待ちは再試行と停止を表示し、再準備・補正を無効にする', () => {
+    const html = render({ phase: 'micReady', canPrepare: false, mic: 'off' }, 'real');
+    expect(html).toContain('音検知は未開始');
+    expect(button(html, 'マイクを起動して検知開始')).not.toContain('disabled');
+    expect(button(html, 'すべて停止')).not.toContain('disabled');
+    expect(button(html, '検知を準備')).toContain('disabled');
+    expect(html.match(/id="youtube-host"/g)).toHaveLength(1);
+    expect(html).toMatch(/<fieldset[^>]*disabled=""[^>]*class="correction-controls"/);
+  });
   it('曲・機種・可視プレイヤー・操作・導線・折りたたみ補正の順に並べる', () => {
     const html = render();
     const markers = ['class="app-header"', 'id="current-song"', 'class="service-picker"', 'id="youtube-host"', 'class="session-card"', 'class="tool-links"', 'class="correction-card"'];
