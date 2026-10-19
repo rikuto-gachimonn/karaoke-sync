@@ -1,6 +1,17 @@
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { resolve, relative, extname } from 'node:path';
-const rootNames = new Set(['index.html','youtube-probe.html','404.html','_headers']);
+const rootNames = new Set(['index.html','youtube-probe.html','karaoke_sync_test.html','404.html','_headers']);
+/** HTTPヘッダーに依存せず、配信HTMLのhead内のrobots指定を検査する。 */
+export function hasSearchExclusion(html:string):boolean {
+  const head=html.replace(/<!--[\s\S]*?-->/g,'').match(/<head\b[^>]*>([\s\S]*?)<\/head\s*>/i)?.[1]??'';
+  const robots=(head.match(/<meta\b[^>]*>/gi)??[]).map(tag=>{
+    const attributes=new Map([...tag.matchAll(/([\w-]+)\s*=\s*(["'])(.*?)\2/g)].map(match=>[match[1]!.toLowerCase(),match[3]!.toLowerCase()]));
+    return attributes.get('name')==='robots'?attributes.get('content'):undefined;
+  }).filter((value):value is string=>value!==undefined);
+  if(robots.length!==1)return false;
+  const directives=robots[0]!.split(/[\s,]+/);
+  return directives.includes('noindex')&&directives.includes('nofollow')&&!directives.includes('index')&&!directives.includes('follow');
+}
 export function allowedArtifactPath(name:string) {
   if(name.includes('\\')||name.split('/').some(part=>!part||part==='.'||part==='..'||part.startsWith('.')))return false;
   return rootNames.has(name)||/^assets\/[\w.-]+\.(?:js|css|svg|png|jpe?g|webp|ico|woff2?)$/.test(name);
@@ -26,14 +37,19 @@ export function readTree(root:string):Map<string,string> {
   }
   visit(resolve(root));return files;
 }
-export function inspectArtifact(files:Map<string,string>) {
+export function inspectArtifact(files:Map<string,string>, base='/') {
   const problems:string[]=[];
   for(const name of rootNames)if(!files.has(name))problems.push('missing: '+name);
   for(const [name,text]of files) {
     if(!allowedArtifactPath(name))problems.push('unexpected-file: '+name);
     for(const rule of secretRules(text))problems.push('secret-pattern: '+name+' / '+rule);
     if(name.endsWith('.html')) {
-      for(const match of text.matchAll(/(?:src|href)=["'](\/assets\/[^"']+)["']/g))if(!files.has(match[1]!.slice(1)))problems.push('missing-asset: '+name);
+      for(const match of text.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
+        const path=match[1]!;
+        if(!path.startsWith('/')||path.startsWith('//')||!path.includes('/assets/'))continue;
+        if(!path.startsWith(base+'assets/'))problems.push('wrong-base-asset: '+name);
+        else if(!files.has(path.slice(base.length)))problems.push('missing-asset: '+name);
+      }
       if(/\/src\/|@vite\/client/.test(text))problems.push('development-reference: '+name);
     }
   }
@@ -45,10 +61,12 @@ export function inspectArtifact(files:Map<string,string>) {
   return problems;
 }
 /** 現在使用する/*ルールだけを検査用に適用。Cloudflareの完全エミュレーターではない。 */
-export function staticResponse(files:Map<string,string>, requestUrl:string) {
+export function staticResponse(files:Map<string,string>, requestUrl:string, base='/') {
   let pathname:string;
   try { pathname=decodeURIComponent(requestUrl.split('?')[0]!); } catch {return {status:400,headers:{'Content-Type':'text/plain'},body:'Bad request'};}
-  const name=pathname==='/'?'index.html':pathname==='/youtube-probe'?'youtube-probe.html':pathname.slice(1);
+  const mounted=pathname.startsWith(base);
+  const relativePath=mounted?pathname.slice(base.length):'';
+  const name=!mounted?'':relativePath===''?'index.html':relativePath==='youtube-probe'?'youtube-probe.html':relativePath;
   const exists=allowedArtifactPath(name)&&name!=='_headers'&&files.has(name);
   const file=exists?name:'404.html';
   const type=extname(file)==='.js'?'text/javascript':extname(file)==='.css'?'text/css':extname(file)==='.html'?'text/html':'application/octet-stream';

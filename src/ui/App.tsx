@@ -131,7 +131,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     }catch(error){setSaveMessage(String(error));}
   }
   return <main className="karaoke-app">
-    <header className="app-header"><h1>KaraokeSync</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
+    <header className="app-header"><h1>SyncLab</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
     <p className="session-notice" role="status" aria-live="polite">{state.notice}</p>
     <div className="performance-area">
       <section id="current-song" className="current-song" aria-label="選択中の曲" tabIndex={-1}>
@@ -320,7 +320,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <p>事前再生方式は「検知を準備」→YouTube内を直接タップ→自動一時停止→マイク許可→音検知で自動再開です。待機中の無音を確認してください。</p>
         <p>PLAYINGはAPI上の確認で実発音ではありません。Bluetooth出力先はWebから完全制御できません。無音・音質低下時は停止し、端末の出力先とマイク保持／解放設定を確認してください。</p>
         <p>固定待機でジッターは消えません。操作刻みは同期精度を保証しません。曲・機種変更時に未保存の調整は引き継ぎません。</p>
-        {!active && <p><a href={mode === 'real' ? '/?mode=simulation' : '/'}>{mode === 'real' ? '模擬モードへ切替' : '実接続モードへ切替'}</a>（画面設定とログはリセット）</p>}
+        {!active && <p><a href={mode === 'real' ? `${import.meta.env.BASE_URL}?mode=simulation` : import.meta.env.BASE_URL}>{mode === 'real' ? '模擬モードへ切替' : '実接続モードへ切替'}</a>（画面設定とログはリセット）</p>}
       </div></details>
     </div>
   </main>;

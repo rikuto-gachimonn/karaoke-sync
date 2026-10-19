@@ -6,8 +6,8 @@ import './styles.css';
 
 const root = document.querySelector<HTMLElement>('#probe-root')!;
 root.innerHTML = `
-<h1>YouTube再生検証</h1>
-<p>検証専用ページです。通常のKaraokeSyncセッション制御は使用しません。⑥⑦は実マイクを使用します。</p>
+<h1>SyncLab</h1>
+<p>検証専用ページです。通常のSyncLabセッション制御は使用しません。⑥⑦は実マイクを使用します。</p>
 <p>各条件で「新しい試行を準備」を押してください。前のプレイヤーとログは置き換わるため、先にJSONを保存してください。</p>
 <label>動画ID <input id="video" value="M7lc1UVf-VE" maxlength="11" autocapitalize="off" spellcheck="false"></label>
 <label>試験条件 <select id="condition">
