@@ -164,6 +164,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       <div className="session-actions">
         <button className="primary prepare" disabled={active} onClick={() => { setRetainMic(retainMic);void controller.prepare(input); }}>{selectedTrigger(input)==='manual'?'手動開始を準備':'検知を準備'}</button>
         <button className="stop" onClick={() => { void stopAll(); }}>すべて停止</button>
+        {state.phase==='micReady' && <button className="primary" onClick={() => controller.retryMicrophone()}>マイクを起動して検知開始</button>}
         {selectedTrigger(input)==='manual' && <button className="primary" disabled={state.phase!=='manualReady'||measurement.busy} onClick={()=>controller.manualStart()}>この位置から開始</button>}
         {state.canRecoverAcquisition && <button onClick={() => { void controller.recoverPendingAcquisition(); }}>未完了の取得を切り離して復旧</button>}
       </div>

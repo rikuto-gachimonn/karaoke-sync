@@ -6,6 +6,7 @@ import { DiagnosticLog } from '../src/diagnostics/log';
 import { sessionOptions } from '../src/config/settings';
 import type { SyncInput } from '../src/domain/sync';
 import type { AudioLease } from '../src/session/ports';
+import { AudioAcquireError, AudioStartError } from '../src/session/ports';
 import { loadSyncProfile, saveSyncProfile, preferencesKey } from '../src/app/preferences';
 
 const input: SyncInput = { videoId: 'M7lc1UVf-VE', service: 'DAM', savedPositionSec: 10, offsetSec: 0,
@@ -25,6 +26,69 @@ function setup(retainMic = true) {
 }
 
 describe('通常アプリの事前再生方式', () => {
+  it.each([0, 30_000])('本編PLAYINGまで%sms待ってもマイク起動期限はまだ始まらない（広告は観測ラベルのみ）', async delay => {
+    const s = setup(); await s.controller.prepare(input);
+    s.player.emit({ type: 'buffering' }); await vi.advanceTimersByTimeAsync(delay);
+    expect(s.acquire).not.toHaveBeenCalled(); expect(s.controller.getSnapshot().phase).toBe('preplay');
+    s.player.emit({ type: 'playing' }); await flush();
+    expect(s.controller.getSnapshot().phase).toBe('armed');
+    expect(s.play).not.toHaveBeenCalled();
+    s.detect(); await flush(); s.player.emit({ type: 'playing' }); await flush();
+    expect(s.controller.getSnapshot().phase).toBe('playing'); await s.controller.stop();
+  });
+
+  it.each([0, 30_000])('本編開始相当のPLAYING後に起動失敗しても再生成功にせず、操作で再試行できる（待機%sms）', async delay => {
+    const s = setup(); s.acquire.mockRejectedValueOnce(new AudioStartError('AudioContext起動期限超過'));
+    await s.controller.prepare(input); s.player.emit({ type: 'buffering' }); await vi.advanceTimersByTimeAsync(delay);
+    s.player.emit({ type: 'playing' }); await flush();
+    expect(s.controller.getSnapshot()).toMatchObject({ phase: 'micReady', mic: 'off', canPrepare: false });
+    expect(s.play).not.toHaveBeenCalled(); expect(s.dispose).not.toHaveBeenCalled();
+    expect(s.controller.exportTrials().trials[0]?.outcome).toBe('pending');
+    s.controller.retryMicrophone(); expect(s.acquire).toHaveBeenCalledTimes(2); // await前に呼ぶ
+    s.controller.retryMicrophone(); expect(s.acquire).toHaveBeenCalledTimes(2);
+    await flush(); expect(s.controller.getSnapshot().phase).toBe('armed');
+    s.detect(); s.detect(); await flush(); expect(s.play).toHaveBeenCalledTimes(1);
+    s.player.emit({ type: 'playing' }); await flush(); expect(s.controller.getSnapshot().phase).toBe('playing');
+    await s.controller.stop(); expect(s.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('再試行も起動失敗なら検知せず再操作待ち。停止後は再試行を無視する', async () => {
+    const s = setup(); s.acquire.mockRejectedValue(new AudioStartError('resume failed'));
+    await s.start(); s.controller.retryMicrophone(); await flush();
+    expect(s.controller.getSnapshot().phase).toBe('micReady'); expect(s.play).not.toHaveBeenCalled();
+    await s.controller.stop(); s.controller.retryMicrophone();
+    expect(s.acquire).toHaveBeenCalledTimes(2); expect(s.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('再試行中に停止したら遅着leaseを解放し、検知も再生も開始しない', async () => {
+    const s = setup(); s.acquire.mockRejectedValueOnce(new AudioStartError('resume failed')); await s.start();
+    let resolve!: (lease: AudioLease) => void;
+    s.acquire.mockReturnValueOnce(new Promise(yes => { resolve = yes; }));
+    s.controller.retryMicrophone(); await s.controller.stop(); resolve(s.lease); await flush();
+    expect(s.release).toHaveBeenCalledTimes(1); expect(s.controller.getSnapshot().phase).toBe('idle');
+    expect(s.play).not.toHaveBeenCalled();
+  });
+
+  it('資源解放失敗はマイク起動待ちへ戻さず終了処理と再解放を行う', async () => {
+    const s = setup(); s.acquire.mockRejectedValueOnce(new AudioAcquireError('起動失敗 / 資源解放失敗', s.lease));
+    await s.start(); expect(s.controller.getSnapshot().phase).toBe('error');
+    expect(s.release).toHaveBeenCalledTimes(1); expect(s.dispose).toHaveBeenCalledTimes(1);
+    s.controller.retryMicrophone(); expect(s.acquire).toHaveBeenCalledTimes(1);
+  });
+
+  it('YouTube再生ブロックをAudioContext失敗と混同せず終了する', async () => {
+    const s = setup(); await s.controller.prepare(input); s.player.emit({ type: 'blocked', message: 'autoplay' }); await flush();
+    expect(s.controller.getSnapshot().phase).toBe('error'); expect(s.acquire).not.toHaveBeenCalled();
+    expect(s.controller.log.snapshot().some(e => e.event === 'mic.activation.required')).toBe(false);
+  });
+
+  it('起動操作待ちに動画が勝手に再開したら安全停止し、検知を始めない', async () => {
+    const s = setup(); s.acquire.mockRejectedValueOnce(new AudioStartError('resume failed')); await s.start();
+    s.player.emit({ type: 'playing' }); await flush();
+    expect(s.controller.getSnapshot().phase).toBe('error'); expect(s.acquire).toHaveBeenCalledTimes(1);
+    expect(s.play).not.toHaveBeenCalled(); expect(s.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('事前手動再生まではマイクを取得せず、自動一時停止確認後だけ検知を開始する', async () => {
     const s = setup(); await s.controller.prepare(input);
     expect(s.controller.getSnapshot().phase).toBe('preplay'); expect(s.acquire).not.toHaveBeenCalled();

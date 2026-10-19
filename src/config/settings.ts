@@ -21,6 +21,7 @@ export const settings = {
   maxArmedTimeoutMs: 1_800_000,
   playingTimeoutMs: 10_000,
   cleanupTimeoutMs: 3_000,
+  audioStartTimeoutMs: 3_000,
   maxDetachedAcquisitions: 2,
   triggerTrialMaxEntries: 30,
   logMaxEntries: 2_000,
