@@ -39,7 +39,7 @@ describe('4段階調整と設定整理', () => {
     const st = storage(); vi.stubGlobal('localStorage',st);
     const html = renderToStaticMarkup(createElement(App,createApp('simulation')));
     for(const step of [5000,1000,100,10]) for(const direction of ['進める','戻す']) expect(html).toContain(`開始位置を${step}ms${direction}`);
-    const normal = html.slice(html.indexOf('id="audio-settings"'),html.indexOf('</details>',html.indexOf('id="audio-settings"')));
+    const normal = html.slice(html.indexOf('id="audio-settings"'),html.indexOf('class="service-picker"'));
     expect(normal).toContain('音量しきい値'); expect(normal).toContain('継続時間'); expect(normal).toContain('この設定を保存');
     expect(normal).not.toContain('同期補正方式');
     expect(normal).toContain('この設定をすべての曲に適用');

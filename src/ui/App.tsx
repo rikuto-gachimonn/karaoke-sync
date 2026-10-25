@@ -15,6 +15,7 @@ import { selectSong } from '../library/selection';
 import { SongLibraryPanel } from './SongLibraryPanel';
 import { openPanel } from './navigation';
 import { StartTriggerSettings } from './StartTriggerSettings';
+import { StartPositionSummary } from './StartPositionSummary';
 import { VolumeMeter } from './VolumeMeter';
 import { YouTubeErrorHelp } from './YouTubeErrorHelp';
 import { ChromeOpen } from './ChromeOpen';
@@ -167,7 +168,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   }
 
   let effectiveDisplay = '入力値を確認してください';
-  try { effectiveDisplay = `${(playbackPlan(input).userPositionMs / 1000).toFixed(3)} 秒`; } catch { /* 不正入力は準備時にも検証 */ }
+  try { effectiveDisplay = `${playbackPlan(input).seekSec.toFixed(3)} 秒`; } catch { /* 不正入力は準備時にも検証 */ }
   function stepEffective(deltaMs: number) {
     try { setInput(adjustEffectiveStart(input, deltaMs)); }
     catch (error) { setSaveMessage(String(error)); }
@@ -209,7 +210,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
         <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
         <label className="auto-duration"><input type="checkbox" checked={input.autoCompensateDetectionDuration === true} onChange={event => setInput({...input, autoCompensateDetectionDuration:event.target.checked})} />検知継続時間の自動補正</label>
-        <p className="duration-summary">{input.autoCompensateDetectionDuration === true ? `ON：＋${(input.durationMs / 1000).toFixed(2)}秒（設定した継続時間）` : 'OFF：従来の開始位置を維持'}。実効開始候補: {(() => {try {return playbackPlan(input).seekSec.toFixed(3) + '秒（動画長制限前）';} catch {return '入力値を確認してください';}})()}</p>
+        <StartPositionSummary input={input} />
         <small>新規設定はON。以前の保存設定はOFFとして読み込み、明示的にONにした場合だけ加算します。APIやBluetoothの再生遅延・実際の検知所要時間を測定する補正ではありません。</small>
         <div className="actions"><button onClick={() => saveCurrentSettings()}>この設定を保存</button><button onClick={() => {
           try {
@@ -351,7 +352,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <label>B 追加位置補正（ms、BまたはA＋B時のみ）<input type="number" min="-86400000" max="86400000" step="1" value={Number.isNaN(compensation.offsetMs) ? '' : compensation.offsetMs} onChange={event => changeCompensation({ offsetMs: event.target.valueAsNumber })} /></label>
         <div className="actions"><button aria-label="補正を50ms戻す" onClick={() => stepCompensation(-1)}>比較B −50ms</button><button aria-label="補正を50ms進める" onClick={() => stepCompensation(1)}>比較B ＋50ms</button></div>
         <p>過去データの位置計算を維持する設定です。通常の調整はメイン画面だけで行ってください。同じ補正をここにも重ねて入力しないでください。</p>
-        <p>計算: 従来開始位置（開始秒＋既存オフセットを0以上へ制限）＋有効B＋主調整ms。最後に動画範囲へ制限。</p>
+        <p>計算結果は音声検知欄の「補正後の再生開始位置」を確認してください。旧オフセットと有効Bも、既存の計算で一度だけ加算します。</p>
         </div></details>
         <label>検知待機期限（秒、継続時間とは別）<input type="number" min="1" max={settings.maxArmedTimeoutMs / 1000} value={(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000} onChange={event => setInput({ ...input, armedTimeoutMs: event.target.valueAsNumber * 1000 })} /></label>
         <label>検知後のマイク資源<select value={retainMic ? 'retain' : 'release'} onChange={event => { const value = event.target.value === 'retain'; setRetain(value); setRetainMic(value); }}><option value="retain">保持（新規設定で推奨・検知は終了）</option><option value="release">解放（比較用）</option></select></label>
