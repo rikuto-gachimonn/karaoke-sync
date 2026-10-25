@@ -1,12 +1,13 @@
 import { validateInput, environments, type SyncInput } from '../domain/sync';
 import { settings } from '../config/settings';
-import type { SyncProfile } from '../app/preferences';
+import type { ModeProfile, SyncProfile } from '../app/preferences';
 
 export type Service = SyncInput['service'];
 export interface Song { videoId: string; title: string; artist: string; accompanimentRef?: string; profiles: Partial<Record<Service, SyncProfile>> }
 export interface Library { format: 'karaokesync-library'; version: 1; songs: Song[] }
 export const libraryKey = 'karaokesync.app.library.v1';
 export const libraryV2Key = 'karaokesync.app.library.v2';
+export const libraryV4Key = 'karaokesync.app.library.v4';
 export const libraryV3Key = 'karaokesync.app.library.v3';
 export const libraryLimits = { songs: 1000, textLength: 200, backupBytes: 5 * 1024 * 1024 } as const;
 export const emptyLibrary = (): Library => ({ format: 'karaokesync-library', version: 1, songs: [] });
@@ -24,12 +25,27 @@ export function defaultProfile(videoId: string, service: Service, mode: 'real' |
     playbackMode: mode === 'real' ? 'preplay' : 'legacy', armedTimeoutMs: settings.defaultArmedTimeoutMs,
     compensation: { mode: 'baseline', waitMs: 0, offsetMs: 0 } } };
 }
-export function validProfile(value: unknown, videoId: string, service: Service): SyncProfile {
+function validModeProfile(value: unknown, videoId: string, service: Service): ModeProfile {
   const profile = record(value); const input = record(profile.input) as unknown as SyncInput;
   if (typeof profile.retainMic !== 'boolean' || input.videoId !== videoId || input.service !== service) throw new Error('曲・機種と設定が一致しません');
   validateInput(input);
   if (input.compensation === null || input.playbackMode === null || input.armedTimeoutMs === null) throw new Error('同期設定が不正です');
   return structuredClone({ input, retainMic: profile.retainMic });
+}
+export function validProfile(value: unknown, videoId: string, service: Service): SyncProfile {
+  const result: SyncProfile = validModeProfile(value, videoId, service);
+  const modes = record(value).modeProfiles;
+  if (modes !== undefined) {
+    const data = record(modes); result.modeProfiles = {};
+    if (Object.keys(data).length > 20) throw new Error('検知モードの保存件数が不正です');
+    for (const [key, item] of Object.entries(data)) {
+      if (!key || key.length > 200 || ['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('検知モードのキーが不正です');
+      const profile = validModeProfile(item, videoId, service);
+      if (['vocal', 'accompaniment'].includes(key) && profile.input.startTrigger !== key) throw new Error('検知モードと保存設定が一致しません');
+      result.modeProfiles[key] = profile;
+    }
+  }
+  return result;
 }
 export function validSong(value: unknown): Song {
   const song = record(value);
@@ -68,6 +84,12 @@ export function decodeLibraryV3(value:unknown):Library {
   if(data.format!=='karaokesync-library-v3'||data.version!==3) throw new Error('曲リストv3の形式が不正です');
   return validLibrary({...data,format:'karaokesync-library',version:1});
 }
+export function encodeLibraryV4(library: Library) { return { format: 'karaokesync-library-v4', version: 4, songs: library.songs }; }
+export function decodeLibraryV4(value: unknown): Library {
+  const data = record(value);
+  if (data.format !== 'karaokesync-library-v4' || data.version !== 4) throw new Error('曲リストv4の形式が不正です');
+  return validLibrary({ ...data, format: 'karaokesync-library', version: 1 });
+}
 const normalized = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 export function duplicate(a: Song, b: Song) {
   return a.videoId === b.videoId || (!!a.artist && !!b.artist && normalized(a.title) === normalized(b.title) && normalized(a.artist) === normalized(b.artist));
@@ -87,7 +109,10 @@ export function upsertSong(library: Library, song: Song, previousVideoId?: strin
 }
 export function changeSongIdentity(song: Song, videoId: string, title: string, artist: string, accompanimentRef?: string): Song {
   const changed = structuredClone(song); changed.videoId = videoId; changed.title = title; changed.artist = artist;
-  for (const profile of Object.values(changed.profiles)) profile.input.videoId = videoId;
+  for (const profile of Object.values(changed.profiles)) {
+    profile.input.videoId = videoId;
+    for (const saved of Object.values(profile.modeProfiles ?? {})) saved.input.videoId = videoId;
+  }
   if (accompanimentRef !== undefined) changed.accompanimentRef = accompanimentRef;
   return validSong(changed);
 }
@@ -106,26 +131,26 @@ export class SongLibrary {
   private data: Library;
   private key: string;
   private legacyReads = new Map<string,string|null>();
-  constructor(private storage: StoragePort, private storageVersion: 1 | 2 | 3 = 1) {
-    this.key = storageVersion === 3 ? libraryV3Key : storageVersion === 2 ? libraryV2Key : libraryKey;
+  constructor(private storage: StoragePort, private storageVersion: 1 | 2 | 3 | 4 = 1) {
+    this.key = storageVersion === 4 ? libraryV4Key : storageVersion === 3 ? libraryV3Key : storageVersion === 2 ? libraryV2Key : libraryKey;
     this.raw = storage.getItem(this.key);
     if (storageVersion !== 1 && this.raw === null) {
-      const previous = storageVersion===3 ? [libraryV2Key,libraryKey] : [libraryKey];
+      const previous = storageVersion===4 ? [libraryV3Key,libraryV2Key,libraryKey] : storageVersion===3 ? [libraryV2Key,libraryKey] : [libraryKey];
       this.data=emptyLibrary();
       for(const key of previous) {
         const raw=storage.getItem(key);this.legacyReads.set(key,raw);
-        if(raw!==null) {this.data=key===libraryV2Key?decodeLibraryV2(JSON.parse(raw)):validLibrary(JSON.parse(raw));break;}
+        if(raw!==null) {this.data=key===libraryV3Key?decodeLibraryV3(JSON.parse(raw)):key===libraryV2Key?decodeLibraryV2(JSON.parse(raw)):validLibrary(JSON.parse(raw));break;}
       }
-    } else this.data = this.raw === null ? emptyLibrary() : storageVersion === 3 ? decodeLibraryV3(JSON.parse(this.raw)) : storageVersion === 2 ? decodeLibraryV2(JSON.parse(this.raw)) : validLibrary(JSON.parse(this.raw));
+    } else this.data = this.raw === null ? emptyLibrary() : storageVersion === 4 ? decodeLibraryV4(JSON.parse(this.raw)) : storageVersion === 3 ? decodeLibraryV3(JSON.parse(this.raw)) : storageVersion === 2 ? decodeLibraryV2(JSON.parse(this.raw)) : validLibrary(JSON.parse(this.raw));
   }
   snapshot(): Library { return structuredClone(this.data); }
   commit(value: Library): Library {
     const next = validLibrary(value);
     if (this.storage.getItem(this.key) !== this.raw || (this.raw === null && [...this.legacyReads].some(([key,raw])=>this.storage.getItem(key)!==raw))) throw new Error('別タブで曲リストが更新されました。再読込してからやり直してください');
-    const raw = JSON.stringify(this.storageVersion === 3 ? encodeLibraryV3(next) : this.storageVersion === 2 ? encodeLibraryV2(next) : next);
+    const raw = JSON.stringify(this.storageVersion === 4 ? encodeLibraryV4(next) : this.storageVersion === 3 ? encodeLibraryV3(next) : this.storageVersion === 2 ? encodeLibraryV2(next) : next);
     if (new Blob([raw]).size > libraryLimits.backupBytes) throw new Error('曲リストが5MiBの保存上限を超えています');
     this.storage.setItem(this.key, raw);
     this.raw = raw; this.data = next; return this.snapshot();
   }
-  export(): string { return JSON.stringify({ ...(this.storageVersion === 3 ? encodeLibraryV3(this.data) : this.storageVersion === 2 ? encodeLibraryV2(this.data) : this.data), exportedAt: new Date().toISOString() }, null, 2); }
+  export(): string { return JSON.stringify({ ...(this.storageVersion === 4 ? encodeLibraryV4(this.data) : this.storageVersion === 3 ? encodeLibraryV3(this.data) : this.storageVersion === 2 ? encodeLibraryV2(this.data) : this.data), exportedAt: new Date().toISOString() }, null, 2); }
 }

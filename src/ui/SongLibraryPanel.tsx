@@ -103,7 +103,7 @@ export function SongLibraryPanel(props: Props) {
     <p>画面で変更しただけの未保存設定は含みません。先に「この曲・機種の設定を保存」を押してください。</p>
     <fieldset disabled={disabled}><legend>復元の準備（まだ保存しません）</legend>
       <label>旧データの機種未選択設定の移行先<select value={legacyService} onChange={event => setLegacyService(event.target.value as Service | '')}><option value="">未指定（機種未選択データは拒否）</option>{environments.map(service => <option value={service} key={service}>{environmentLabels[service]}</option>)}</select></label>
-      <label>JSONファイル（React v3 / v2 / v1 / 旧HTML 0.6）<input type="file" accept=".json,application/json" onChange={event => {
+      <label>JSONファイル（React v4 / v3 / v2 / v1 / 旧HTML 0.6）<input type="file" accept=".json,application/json" onChange={event => {
         const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
         setReading(true); setPreview(undefined);
         void (async () => { try {
@@ -113,7 +113,7 @@ export function SongLibraryPanel(props: Props) {
       }} /></label>
       <button onClick={() => { try { showImport(readLegacyBackup(localStorage)); } catch (error) { setPreview(undefined); setMessage(String(error)); } }}>このオリジンの旧localStorageを読んでプレビュー</button>
     </fieldset>
-    {preview && <div className="import-preview"><h3>復元プレビュー（{preview.data.source}）</h3>
+    {preview && <div className="import-preview"><p>復元時はバックアップに含まれるモードを更新し、含まれない既存モードは保持します。旧設定は対応するモードとして読み込みます。</p><h3>復元プレビュー（{preview.data.source}）</h3>
       {preview.data.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
       {preview.data.library.songs.map(song => {
         const existing = library.songs.find(item => item.videoId === song.videoId);

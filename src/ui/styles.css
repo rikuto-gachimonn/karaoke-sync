@@ -134,3 +134,16 @@ caption { text-align: left; margin-bottom: 8px; }
 .volume-meter { margin-bottom:8px; }
 .button-link { display:inline-flex; align-items:center; min-height:44px; padding:8px 10px; border:1px solid #78958b; border-radius:7px; color:#173d30; background:#eaf4f0; }
 .browser-help label { margin:8px 0; }
+
+/* State-specific main actions; no microphone or playback behavior is changed. */
+.playback-time-main { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; min-width:0; }
+.playback-time-value { display:grid; min-width:0; }
+.playback-time-value > span { font-size:.8rem; }
+.playback-time-main > .stop { flex:0 0 auto; min-height:44px; font-size:.85rem; padding:8px; white-space:nowrap; background:#923a31; color:white; }
+.normal-settings .trigger-settings { flex-basis:100%; border:0; margin:0; padding:0; }
+.normal-settings .trigger-settings fieldset { display:grid; gap:8px; }
+.normal-settings .trigger-settings label { max-width:100%; }
+.normal-settings .trigger-settings input { max-width:100%; }
+.normal-settings .trigger-settings p { font-size:.8rem; }
+.normal-settings small { flex-basis:100%; }
+.session-actions > button[hidden], [hidden] { display:none !important; }

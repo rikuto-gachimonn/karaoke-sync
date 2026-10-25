@@ -216,7 +216,7 @@ describe('⑥ 事前再生＋実マイク検知の契約', () => {
   });
   it('しきい値と継続時間成立後に指定位置のseek→playを1回のみ実行する', async () => {
     const s = micSetup({ startSec: 12.35, threshold: 0.2, durationMs: 100 }); const i = await s.arm();
-    s.sample(0.2); s.sample(0.5); s.sample(0.5); expect(i.handle.playVideo).not.toHaveBeenCalled();
+    s.sample(0.199); s.sample(0.5); s.sample(0.5); expect(i.handle.playVideo).not.toHaveBeenCalled();
     s.sample(0.5); s.sample(0.5); s.state(2);
     expect(i.handle.seekTo).toHaveBeenCalledExactlyOnceWith(12.35, true); expect(i.handle.playVideo).toHaveBeenCalledTimes(1);
     expect(i.handle.seekTo.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(i.handle.playVideo).mock.invocationCallOrder[0]!);
@@ -327,10 +327,10 @@ describe('⑥ マイク資源の追加競合回帰', () => {
     const retry = s.probe.retryMicCleanup(); await flushMic(); expect(s.lease.release).toHaveBeenCalledTimes(1);
     finish(); await retry; expect(s.probe.run?.entries.at(-1)?.event).toBe('mic.cleanup.retried');
   });
-  it('0ms継続でもしきい値超過前に再生しない', async () => {
+  it('0ms継続でもしきい値未満で再生せず等号で成立する', async () => {
     const s = micSetup({ durationMs: 0 }); const i = await s.arm();
-    s.sample(0); s.sample(micProbeDefaults.threshold); expect(i.handle.playVideo).not.toHaveBeenCalled();
-    s.sample(0.5); expect(i.handle.playVideo).toHaveBeenCalledTimes(1);
+    s.sample(0); s.sample(micProbeDefaults.threshold - .001); expect(i.handle.playVideo).not.toHaveBeenCalled();
+    s.sample(micProbeDefaults.threshold); expect(i.handle.playVideo).toHaveBeenCalledTimes(1);
   });
   it('マイク取得後の停止状態が変わっていたらarmせず解放する', async () => {
     const s = micSetup(); let resolve!: (value: AudioLease) => void;
@@ -350,7 +350,7 @@ describe('⑥ 継続時間の入力・境界値回帰', () => {
     expect(i.handle.playVideo).not.toHaveBeenCalled();
     const emit = vi.mocked(s.lease.subscribe).mock.calls[0]![0];
     const threshold = micProbeDefaults.threshold;
-    emit({ rms: threshold, timeMs: 10 });
+    emit({ rms: threshold - .001, timeMs: 10 });
     expect(i.handle.playVideo).not.toHaveBeenCalled();
     emit({ rms: threshold + 0.01, timeMs: 100 });
     if (durationMs === 0) {

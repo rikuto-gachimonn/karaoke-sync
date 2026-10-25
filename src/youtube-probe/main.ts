@@ -22,8 +22,8 @@ root.innerHTML = `
 <label>③の待機時間（秒） <input id="delay" type="number" min="0" max="300" step="1" value="5"></label>
 <fieldset><legend>⑥⑦ マイク音検知の設定（準備時に確定）</legend>
 <label>開始位置（秒）<input id="mic-start" type="number" min="0" max="86400" step="0.05" value="0"></label>
-<label>RMSしきい値（超過で判定）<input id="mic-threshold" type="number" min="0" max="1" step="0.01" value="${micProbeDefaults.threshold}"></label>
-<label>検知継続時間（ms、0＝最初のしきい値超過で成立）<input id="mic-duration" type="number" min="0" max="2000" step="10" value="${micProbeDefaults.durationMs}"></label>
+<label>RMSしきい値（以上で判定）<input id="mic-threshold" type="number" min="0" max="1" step="0.01" value="${micProbeDefaults.threshold}"></label>
+<label>検知継続時間（ms、0＝最初のしきい値到達で成立）<input id="mic-duration" type="number" min="0" max="2000" step="10" value="${micProbeDefaults.durationMs}"></label>
 <label>検知待機期限（秒、継続時間とは別。1〜300秒、初期180秒）<input id="mic-timeout" type="number" min="1" max="300" value="180"></label>
 <label>検知後のマイク<select id="mic-retain"><option value="retain">保持</option><option value="release">解放</option></select></label>
 </fieldset>

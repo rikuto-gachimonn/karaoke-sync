@@ -6,8 +6,10 @@ import { settings } from '../config/settings';
 import { playbackPlan, selectedTrigger, triggerLabels, adoptThreshold, adjustPosition, adjustEffectiveStart, environments, environmentLabels, type SyncInput } from '../domain/sync';
 import { phaseLabels } from '../session/controller';
 import { compensationDefaults, type Compensation } from '../youtube-probe/compensation';
+import { defaultDetectionProfile, selectDetectionProfile, existingDetectionProfile, detectionModeFor, detectionModeLabels, withDetectionProfile, type DetectionMode } from '../app/detectionModes';
+import type { ModeProfile, SyncProfile } from '../app/preferences';
 import { saveSyncProfile, loadSyncProfile } from '../app/preferences';
-import { SongLibrary, emptyLibrary, defaultProfile, setSongProfile, type Library, type Song, type Service } from '../library/model';
+import { SongLibrary, emptyLibrary, setSongProfile, type Library, type Song, type Service } from '../library/model';
 import { planAudioSettings } from '../library/audioSettings';
 import { selectSong } from '../library/selection';
 import { SongLibraryPanel } from './SongLibraryPanel';
@@ -37,8 +39,12 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     window.addEventListener('pageshow', expand);
     return () => window.removeEventListener('pageshow', expand);
   }, []);
-  const [retainMic, setRetain] = useState(true);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [initialProfile] = useState(() => {
+    try { return { profile: selectDetectionProfile(loadSyncProfile(localStorage, 'dQw4w9WgXcQ', 'DAM', 4), 'dQw4w9WgXcQ', 'DAM', 'vocal', mode), error: '' }; }
+    catch (error) { return { profile: defaultDetectionProfile('dQw4w9WgXcQ', 'DAM', 'vocal', mode), error: `保存設定を読み込めません: ${String(error)}` }; }
+  });
+  const [retainMic, setRetain] = useState(initialProfile.profile.retainMic);
+  const [saveMessage, setSaveMessage] = useState(initialProfile.error);
   const [historyStatus]=useState(()=>{try{return {store:new LiveHistory(localStorage),error:''};}catch(error){return {store:undefined,error:String(error)};}});
   const emptyResults=useState<ReturnType<LiveHistory['getSnapshot']>>([])[0];
   const results=useSyncExternalStore(historyStatus.store?.subscribe??(()=>()=>{}),historyStatus.store?.getSnapshot??(()=>emptyResults),()=>emptyResults);
@@ -47,24 +53,41 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   const [latencyError,setLatencyError]=useState('');const latencyImportId=useRef(0);
   useEffect(()=>{try{const exported=controller.exportTrials();historyStatus.store?.capture(exported.runId,exported.trials);}catch(error){setHistoryError(String(error));}},[controller,historyStatus.store,logVersion,state.liveAdjustmentMs,state.phase]);
   const [libraryStatus] = useState(() => {
-    try { return { store: new SongLibrary(localStorage, 3), error: '' }; }
+    try { return { store: new SongLibrary(localStorage, 4), error: '' }; }
     catch (error) { return { store: undefined, error: String(error) }; }
   });
   const [library, setLibrary] = useState<Library>(() => libraryStatus.store?.snapshot() ?? emptyLibrary());
   const [selectedVideoId, setSelectedVideoId] = useState<string>();
   const [switchingSong, setSwitchingSong] = useState(false);
-  const [input, setInput] = useState<SyncInput>({
-    videoId: 'dQw4w9WgXcQ', service: 'DAM', savedPositionSec: 0, offsetSec: 0,
-    threshold: settings.normalThreshold, durationMs: settings.normalDurationMs,
-    playbackMode: mode === 'real' ? 'preplay' : 'legacy', compensation: { ...compensationDefaults }, armedTimeoutMs: settings.defaultArmedTimeoutMs,
-  });
+  const [input, setInput] = useState<SyncInput>(() => structuredClone(initialProfile.profile.input));
+  const modeDrafts = useRef(new Map<string, ModeProfile>());
+  const detectionMode = detectionModeFor(input);
+  const draftKey = (videoId: string, service: Service, value: DetectionMode) => `${videoId}:${service}:${value}`;
+  function savedContainer(videoId = input.videoId, service = input.service): SyncProfile | undefined {
+    return library.songs.find(song => song.videoId === videoId && song.videoId === selectedVideoId)?.profiles[service] ?? loadSyncProfile(localStorage, videoId, service, 4);
+  }
+  function savedMode(videoId = input.videoId, service = input.service) {
+    return existingDetectionProfile(savedContainer(videoId, service), detectionMode);
+  }
+  function changeDetectionMode(next: DetectionMode) {
+    if (active || next === detectionMode) return;
+    try {
+      modeDrafts.current.set(draftKey(input.videoId, input.service, detectionMode), { input: structuredClone(input), retainMic });
+      const profile = modeDrafts.current.get(draftKey(input.videoId, input.service, next)) ??
+        selectDetectionProfile(savedContainer(), input.videoId, input.service, next, mode);
+      setInput(structuredClone(profile.input)); setRetain(profile.retainMic); setRetainMic(profile.retainMic);
+      setSaveMessage(`${detectionModeLabels[next]}の設定を読み込みました。未保存のモードは初期値です。変更は保存してください`);
+    } catch (error) { setSaveMessage(`モードを変更できません: ${String(error)}`); }
+  }
   const [audioPlan, setAudioPlan] = useState<ReturnType<typeof planAudioSettings>>();
   const [applyingAudio, setApplyingAudio] = useState(false);
+  const playbackControls = ['playing', 'paused', 'buffering', 'starting'].includes(state.phase);
+  const showPlaybackActions = playbackControls || state.phase === 'waiting';
   const active = !state.canPrepare || switchingSong || measurement.busy || applyingAudio || !!audioPlan;
   function libraryChanged(next: Library) {
     setLibrary(next);
     if (selectedVideoId && !next.songs.some(song => song.videoId === selectedVideoId)) {
-      setSelectedVideoId(undefined); setInput(defaultProfile('', input.service, mode).input);
+      setSelectedVideoId(undefined); modeDrafts.current.clear(); setInput(defaultDetectionProfile('', input.service, 'vocal', mode).input);
     }
   }
   async function chooseSong(song: Song, service: Service = input.service) {
@@ -73,7 +96,9 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     try {
       await calibration.reset();
       if(calibration.getSnapshot().busy) throw new Error('測定資源の回収が未完了です。解放後に再試行してください');
-      const profile = await selectSong(controller, song, service, mode, () => loadSyncProfile(localStorage, song.videoId, service, 3));
+      const container = await selectSong(controller, song, service, mode, () => loadSyncProfile(localStorage, song.videoId, service, 4));
+      const profile = selectDetectionProfile(container, song.videoId, service, detectionMode, mode);
+      modeDrafts.current.clear();
       setInput(profile.input); setRetain(profile.retainMic); setRetainMic(profile.retainMic); setSelectedVideoId(song.videoId);
       setSaveMessage(`${song.title} / ${environmentLabels[service]}を読み込みました。設定が未保存なら初期値です。変更は保存してください`); return true;
     } catch (error) { setSaveMessage(`曲を変更できません: ${String(error)}`); return false; }
@@ -82,19 +107,21 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   function initialProfiles(videoId: string): Song['profiles'] {
     const profiles: Song['profiles'] = {};
     for (const service of environments) {
-      const existing = loadSyncProfile(localStorage, videoId, service, 3);
+      const existing = loadSyncProfile(localStorage, videoId, service, 4);
       if (existing) profiles[service] = existing;
     }
-    if (videoId === input.videoId) profiles[input.service] = { input: structuredClone(input), retainMic };
+    if (videoId === input.videoId) profiles[input.service] = withDetectionProfile(profiles[input.service], { input: structuredClone(input), retainMic });
     return profiles;
   }
   function saveCurrentSettings(next: SyncInput = input, nextRetain = retainMic) {
     try {
+      const profile = withDetectionProfile(savedContainer(next.videoId, next.service), { input: next, retainMic: nextRetain });
       if (selectedVideoId) {
         if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
-        libraryChanged(libraryStatus.store.commit(setSongProfile(library, selectedVideoId, { input: next, retainMic:nextRetain })));
-        setSaveMessage('選択曲・機種の同期設定を曲リストへ保存しました（JSONバックアップ対象）');
-      } else { saveSyncProfile(localStorage, { input: next, retainMic }, 3); setSaveMessage('手入力動画・環境の同期設定をv3専用領域へ保存しました。曲登録で曲リストへ引き継げます'); }
+        libraryChanged(libraryStatus.store.commit(setSongProfile(library, selectedVideoId, profile)));
+        setSaveMessage(`${detectionModeLabels[detectionModeFor(next)]}の設定を曲リストへ保存しました（JSONバックアップ対象）`);
+      } else { saveSyncProfile(localStorage, profile, 4); setSaveMessage('手入力動画・環境の同期設定をv4モード別領域へ保存しました。曲登録で曲リストへ引き継げます'); }
+      modeDrafts.current.set(draftKey(next.videoId, next.service, detectionModeFor(next)), { input: structuredClone(next), retainMic: nextRetain });
       return true;
     } catch (error) { setSaveMessage(`保存できません: ${String(error)}`); return false; }
   }
@@ -103,7 +130,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     try {
       if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
       setAudioPlan(planAudioSettings(library, { threshold: input.threshold, durationMs: input.durationMs },
-        (videoId, service) => loadSyncProfile(localStorage, videoId, service, 3)));
+        (videoId, service) => loadSyncProfile(localStorage, videoId, service, 4), detectionMode));
       setSaveMessage('');
     } catch (error) { setSaveMessage(`一括適用できません: ${String(error)}`); }
   }
@@ -117,7 +144,8 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
       if (JSON.stringify(libraryStatus.store.snapshot()) !== audioPlan.source) throw new Error('確認中に曲リストが更新されました。内容を確認してやり直してください');
       libraryChanged(libraryStatus.store.commit(audioPlan.library));
-      setSaveMessage(`${audioPlan.songCount}曲・${audioPlan.profileCount}件の設定に音検知設定を適用しました。未保存の機種設定は追加していません`);
+      modeDrafts.current.delete(draftKey(input.videoId, input.service, detectionMode));
+      setSaveMessage(`${detectionModeLabels[detectionMode]}の${audioPlan.songCount}曲・${audioPlan.profileCount}件に音検知設定を適用しました。未保存の機種設定は追加していません`);
     } catch (error) { setSaveMessage(`一括適用に失敗しました: ${String(error)}`); }
     finally { setApplyingAudio(false); setAudioPlan(undefined); }
   }
@@ -147,7 +175,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   let recommendationError='';
   try {
     if(result){
-      const profile=library.songs.find(song=>song.videoId===selectedVideoId)?.profiles[input.service]??loadSyncProfile(localStorage,input.videoId,input.service,3);
+      const profile = savedMode();
       savedForRecommendation=profile?.input??result.input;savedRetain=profile?.retainMic??result.retainMic;
       recommendation=liveRecommendation(result,savedForRecommendation);
     }
@@ -156,7 +184,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     if(!result||!recommendation||!savedForRecommendation||switchingSong||measurement.busy||(!state.canPrepare&&state.phase!=='playing'))return;
     try {
       // 未保存の編集や別の操作による保存を黙って失わない。
-      const latest=library.songs.find(song=>song.videoId===selectedVideoId)?.profiles[input.service]?.input??loadSyncProfile(localStorage,input.videoId,input.service,3)?.input??result.input;
+      const latest = savedMode()?.input ?? result.input;
       if(JSON.stringify(latest)!==JSON.stringify(savedForRecommendation))throw new Error('保存設定が変わりました。再確認してください');
       if(recommendation.remainingMs===0){setSaveMessage('この補正結果は採用済みです');return;}
       if((JSON.stringify(input)!==JSON.stringify(latest)||retainMic!==savedRetain)&&!window.confirm('未保存の画面設定があります。推奨値は保存済み設定（未保存なら試行開始時設定）を基に計算します。置き換えて保存しますか？'))return;
@@ -172,63 +200,67 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <p>{library.songs.find(song => song.videoId === selectedVideoId)?.artist || input.videoId || '曲を選択してください'}</p></div>
         <button aria-controls="song-picker" onClick={() => openPanel('song-picker')}>曲を変更</button>
       </section>
-      <details id="audio-settings" className="normal-settings tool-panel" ref={audioSettingsRef} open={audioExpanded} onToggle={event => setAudioExpanded(event.currentTarget.open)}><summary>音声検知</summary><div className="panel-body"><fieldset disabled={active}><legend>音検知・設定保存</legend>
+      <details id="audio-settings" hidden={playbackControls} className="normal-settings tool-panel" ref={audioSettingsRef} open={audioExpanded} onToggle={event => setAudioExpanded(event.currentTarget.open)}><summary>音声検知</summary><div className="panel-body"><fieldset disabled={active}><legend>音検知・設定保存</legend>
+        <StartTriggerSettings input={input} disabled={active} onChange={next => { if (!active) setInput(next); }} onModeChange={changeDetectionMode} />
         <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
         <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
         <div className="actions"><button onClick={() => saveCurrentSettings()}>この曲・機種の設定を保存</button><button onClick={() => {
           try {
-            const saved = library.songs.find(song => song.videoId === selectedVideoId)?.profiles[input.service] ?? loadSyncProfile(localStorage, input.videoId, input.service, 3);
+            const saved = savedMode();
             if (!saved) { setSaveMessage('この動画・機種の保存設定はありません'); return; }
-            setInput(saved.input); setRetain(saved.retainMic); setRetainMic(saved.retainMic); setSaveMessage('設定を復元しました。次の準備から適用します');
+            modeDrafts.current.delete(draftKey(input.videoId, input.service, detectionMode)); setInput(saved.input); setRetain(saved.retainMic); setRetainMic(saved.retainMic); setSaveMessage('設定を復元しました。次の準備から適用します');
           } catch (error) { setSaveMessage(`復元できません: ${String(error)}`); }
         }}>この動画・機種の設定を復元</button></div>
         <button onClick={previewAudioSettings}>音検知設定を全曲に適用</button>
+        <small>保存・一括適用の対象: {detectionModeLabels[detectionMode]}。他のモードは変更しません。</small>
         <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
       </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
         <h2 id="audio-apply-title">音検知設定の一括適用</h2>
-        <p id="audio-apply-description">現在の音量しきい値{audioPlan.values.threshold}、検知継続時間{audioPlan.values.durationMs}msを保存済みの全曲に適用します。既存の音検知設定は上書きされます。よろしいですか？（対象: {audioPlan.songCount}曲・{audioPlan.profileCount}件）</p>
+        <p id="audio-apply-description">{detectionModeLabels[detectionMode]}の現在の音量しきい値{audioPlan.values.threshold}、検知継続時間{audioPlan.values.durationMs}msを保存済みの全曲に適用します。既存の音検知設定は上書きされます。よろしいですか？（対象: {audioPlan.songCount}曲・{audioPlan.profileCount}件）</p>
         <div className="actions"><button autoFocus disabled={applyingAudio} onClick={() => { setAudioPlan(undefined); setSaveMessage('一括適用をキャンセルしました'); }}>キャンセル</button><button disabled={applyingAudio} onClick={() => { void applyAudioSettings(); }}>{applyingAudio ? '適用中…' : '適用'}</button></div>
       </div>}<p role="status" className="save-status">{saveMessage}</p><button aria-controls="calibration-panel" onClick={()=>openPanel('calibration-panel')}>しきい値を測定・提案</button></div></details>
-      <div className="service-picker"><fieldset disabled={active}>
+      <div className="service-picker" hidden={playbackControls}><fieldset disabled={active}>
         <label>カラオケ機種・利用環境<select value={input.service} onChange={event => {
           const service = event.target.value as Service;
           const song = library.songs.find(item => item.videoId === selectedVideoId);
           if (song) { void chooseSong(song, service); return; }
           try {
-            const profile = loadSyncProfile(localStorage, input.videoId, service, 3) ?? defaultProfile(input.videoId, service, mode);
+            const profile = selectDetectionProfile(loadSyncProfile(localStorage, input.videoId, service, 4), input.videoId, service, detectionMode, mode);
+            modeDrafts.current.clear();
             setInput(profile.input); setRetain(profile.retainMic); setRetainMic(profile.retainMic); setSaveMessage(`${environmentLabels[service]}の保存設定または初期値を読み込みました。未保存の編集は引き継ぎません`);
           } catch (error) { setSaveMessage(String(error)); }
         }}><option value="DAM">DAM</option><option value="JOYSOUND">JOYSOUND</option><option value="HOME">自宅テスト（PC＋スピーカー）</option></select></label>
       </fieldset></div>
-      <StartTriggerSettings input={input} disabled={active} onChange={next=>{ if(!active) setInput(next); }} />
-      <VolumeMeter meter={meter} threshold={input.threshold} />
     <section className="session-card" aria-labelledby="session-heading"><h2 id="session-heading" className="sr-only">セッション操作</h2>
-      <div role="status" aria-live="polite"><strong>{state.phase === 'armed' ? '音検知待機中（'+triggerLabels[selectedTrigger(input)]+'）' : phaseLabels[state.phase]}</strong><p>{state.message}</p><small>セッションのマイク: {state.mic}</small></div>
+      <div role="status" aria-live="polite"><strong>{state.phase === 'armed' ? '音検知待機中（'+triggerLabels[selectedTrigger(input)]+'）' : `${phaseLabels[state.phase]} / ${detectionModeLabels[detectionMode]}`}</strong><p>{state.message}</p></div>
       {measurement.busy && <p role="status">測定モード: {measurement.message}（すべて停止で中断）</p>}
       {measurement.phase==='error' && <p role="alert">{measurement.message}。測定パネルで確認してください。</p>}
       {state.phase==='error'&&<YouTubeErrorHelp message={state.message} videoId={controller.exportTrials().trials.at(-1)?.input.videoId??input.videoId}/>}
       {state.resourceWarning && <p role="alert">{state.resourceWarning}</p>}
       <div className="session-actions">
-        <button className="primary prepare" disabled={active} onClick={() => { setRetainMic(retainMic);void controller.prepare(input); }}>{selectedTrigger(input)==='manual'?'手動開始を準備':'検知を開始'}</button>
-        <button className="stop" onClick={() => { void stopAll(); }}>すべてを停止</button>
+        <button className="primary prepare" hidden={playbackControls} disabled={active} onClick={() => { setSaveMessage(''); setRetainMic(retainMic);void controller.prepare(input); }}>検知を開始</button>
+        <button className="stop" hidden={playbackControls} onClick={() => { void stopAll(); }}>すべてを停止</button>
+        {showPlaybackActions && state.phase !== 'paused' && <button disabled={!['waiting', 'starting', 'buffering', 'playing'].includes(state.phase)} onClick={() => { void controller.pause(); }}>一時停止</button>}
+        {state.phase === 'paused' && <button disabled={state.phase !== 'paused' || state.message === '一時停止を確認中'} onClick={() => controller.resume()}>再生</button>}
         {state.phase==='micReady' && <button className="primary" onClick={() => controller.retryMicrophone()}>マイクを起動して検知開始</button>}
-        {selectedTrigger(input)==='manual' && <button className="primary" disabled={state.phase!=='manualReady'||measurement.busy} onClick={()=>controller.manualStart()}>この位置から開始</button>}
         {state.canRecoverAcquisition && <button onClick={() => { void controller.recoverPendingAcquisition(); }}>未完了の取得を切り離して復旧</button>}
       </div>
       {state.canRecoverAcquisition && <p>この操作はブラウザの取得要求を取り消しません。旧要求の結果は隔離して回収し、新しい準備を可能にします。復旧回数には上限があります。</p>}
     </section>
+      <VolumeMeter meter={meter} threshold={input.threshold} />
       <section className="player-card" aria-label="YouTubeプレイヤー">
         <div id="youtube-host" className="player-host" />
-        <PlaybackTime controller={controller} phase={state.phase} />
-        <p className="player-hint">{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
+        <PlaybackTime controller={controller} phase={state.phase} stopAction={playbackControls ? <button className="stop" onClick={() => { void stopAll(); }}>すべてを停止</button> : undefined} />
+        <p className="player-hint" hidden={playbackControls}>{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
       </section>
+      {playbackControls && <p role="status" className="save-status">{saveMessage}</p>}
       <nav className="tool-links" aria-label="その他の操作">
         <button aria-controls="song-picker" onClick={()=>openPanel('song-picker')}>曲を選ぶ</button>
-        <button aria-controls="settings-panel" onClick={() => openPanel('settings-panel')}>詳細設定</button>
+        <button disabled={playbackControls} aria-controls="settings-panel" onClick={() => openPanel('settings-panel')}>詳細設定</button>
         <button aria-controls="song-management" onClick={() => openPanel('song-management')}>曲管理</button>
         <button aria-controls="diagnostics-panel" onClick={() => openPanel('diagnostics-panel')}>診断ログ</button>
       </nav>
-      <details id="correction-panel" className="correction-card" aria-labelledby="correction-heading">
+      <details hidden={playbackControls} id="correction-panel" className="correction-card" aria-labelledby="correction-heading">
         <summary><h2 id="correction-heading">実効開始位置の調整</h2><output aria-label="実効開始位置" className="effective-position">{effectiveDisplay}</output></summary>
         <div className="panel-body"><small>＋は先へ／−は前へ</small>
         <fieldset disabled={active} className="correction-controls">
@@ -266,39 +298,39 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       </section>
     </div>
     <div className="tools-area">
-      <ChromeOpen />
       <SongLibraryPanel store={libraryStatus.store} library={library} loadError={libraryStatus.error} selected={selectedVideoId}
         active={active} busy={switchingSong || measurement.busy} currentVideoId={input.videoId} initialProfiles={initialProfiles}
-        onChanged={libraryChanged} onSelect={chooseSong} onRestored={() => { setSelectedVideoId(undefined); setInput(defaultProfile('', input.service, mode).input); }} />
-    <CalibrationPanel calibration={calibration} context={input.videoId+':'+input.service} canAdopt={!active} onAdopt={value=>{
-      const context=input.videoId+':'+input.service;
+        onChanged={libraryChanged} onSelect={chooseSong} onRestored={() => { setSelectedVideoId(undefined); modeDrafts.current.clear(); setInput(defaultDetectionProfile('', input.service, 'vocal', mode).input); }} />
+    <details id="advanced-settings" className="tool-panel"><summary>詳細設定・診断ツール</summary><div className="panel-body">
+    <ChromeOpen />
+    <CalibrationPanel calibration={calibration} context={input.videoId+':'+input.service+':'+detectionMode} canAdopt={!active} onAdopt={value=>{
+      const context=input.videoId+':'+input.service+':'+detectionMode;
       if(active || calibration.suggestion(context).value!==value) return;
       setInput(previous=>adoptThreshold(previous,value));
       controller.log.add(state.generation,'measurement.adopted',JSON.stringify({context,threshold:value}));
       setSaveMessage('提案しきい値を採用しました。次回準備から適用します。曲・利用環境へ保存してください');
     }} />
-    <details id="settings-panel" className="tool-panel"><summary>詳細設定・設定の保存／復元</summary><div className="panel-body">
+    <details hidden={playbackControls} id="settings-panel" className="tool-panel"><summary>詳細設定・設定の保存／復元</summary><div className="panel-body">
       <fieldset disabled={active}><legend>準備前に入力</legend>
         <label>再生方式<select value={input.playbackMode ?? 'legacy'} onChange={event => setInput({ ...input, playbackMode: event.target.value as SyncInput['playbackMode'] })}><option value="preplay">事前再生方式（推奨・iPhone向け）</option><option value="legacy">従来方式（事前再生なし・PC比較用）</option></select></label>
         <ManualVideoInput videoId={input.videoId} onApply={videoId=>{
           if(active)return;
           if(videoId===input.videoId){setSaveMessage('同じ動画IDです。現在の同期設定を維持しました');return;}
-          if(selectedVideoId){setSelectedVideoId(undefined);setInput(defaultProfile(videoId,input.service,mode).input);setRetain(true);setRetainMic(true);setSaveMessage('曲リスト選択を解除し、新しい動画を確定しました。同期設定は初期値です');}
-          else {setInput({...input,videoId});setSaveMessage('手入力動画を確定しました。開始位置・設定を確認してください');}
+          try {
+            const existing = loadSyncProfile(localStorage, videoId, input.service, 4);
+            const profile = existing ? selectDetectionProfile(existing, videoId, input.service, detectionMode, mode) :
+              selectedVideoId ? defaultDetectionProfile(videoId, input.service, detectionMode, mode) : { input: { ...input, videoId }, retainMic };
+            setSelectedVideoId(undefined); modeDrafts.current.clear(); setInput(profile.input); setRetain(profile.retainMic); setRetainMic(profile.retainMic);
+            setSaveMessage('手入力動画を確定しました。モード別の保存設定と開始位置を確認してください');
+          } catch (error) { setSaveMessage(`保存設定を読み込めません: ${String(error)}`); }
         }}/>
-        <label>開始位置（秒）（登録開始位置）<input type="number" min="0" step="0.05" value={Number.isNaN(input.savedPositionSec) ? '' : input.savedPositionSec} onChange={event => numeric('savedPositionSec', event.target.value)} /></label>
-
       </fieldset>
       <p>曲選択・機種変更時は未保存の編集を引き継ぎません。必要な調整は先に保存してください。</p>
       <p>開始設定は「検知を開始」時に確定し、検知成立時の初回シークに適用します。歌唱中は別枠の位置調整を利用できます。変更・動画切替は「すべて停止」後に行ってください。</p>
       <details><summary>基準位置と適用タイミングの内訳</summary>{(()=>{try{const plan=playbackPlan(input);return <dl><dt>YouTube基準位置（選択トリガー）</dt><dd>{(selectedTrigger(input)==='vocal'?input.vocalPositionSec??input.savedPositionSec:selectedTrigger(input)==='cue'?input.cuePositionSec??input.savedPositionSec:input.savedPositionSec).toFixed(3)}秒</dd><dt>主調整 / 旧オフセット / B</dt><dd>{input.startAdjustmentMs??0}ms / {input.offsetSec}秒 / {compensation.offsetMs}ms（Bは方式に従う）</dd><dt>安定化待機 / 負位置不足 / 比較A待機</dt><dd>{plan.stabilizationMs}ms / {plan.negativeWaitMs}ms / {plan.fixedWaitMs}ms</dd><dt>予定総待機 / 動画開始候補（動画長制限前）</dt><dd>{plan.waitMs}ms / {plan.seekSec.toFixed(3)}秒</dd><dt>直近試行の実適用位置（API要求値）</dt><dd>{(()=>{const trial=trialSnapshot.trials.at(-1);return trial?.input.videoId===input.videoId&&trial.environment===input.service&&selectedTrigger(trial.input)===selectedTrigger(input)&&trial.seekSec!==undefined?trial.seekSec.toFixed(3)+'秒（実発音未確認）':'未記録';})()}</dd></dl>;}catch{return <p>入力値を確認してください</p>;}})()}</details>
       <p>正の補正は動画の先の位置から開始します。操作刻みは実際の同期精度を保証しません。</p>
     </div></details>
-    <details id="developer-settings" className="tool-panel"><summary>開発者向け設定・比較実験</summary><div className="panel-body">
-      <div className="actions" aria-label="補助の再生操作">
-        <button disabled={!['waiting', 'starting', 'buffering', 'playing'].includes(state.phase)} onClick={() => { void controller.pause(); }}>一時停止</button>
-        <button disabled={state.phase !== 'paused' || state.message === '一時停止を確認中'} onClick={() => controller.resume()}>再生</button>
-      </div>
+    <details hidden={playbackControls} id="developer-settings" className="tool-panel"><summary>開発者向け設定・比較実験</summary><div className="panel-body">
       <p>通常の位置調整はメイン画面で行ってください。折りたたんでも保存値・編集中の値は維持されます。</p>
       <fieldset disabled={active}><legend>停止中のみ変更可能</legend>
         <label>安定化待機（ms・比較用）<input type="number" min="0" max="60000" step="1" value={input.stabilizationWaitMs??0} onChange={event=>setInput({...input,stabilizationWaitMs:event.target.valueAsNumber})}/></label>
@@ -362,6 +394,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <p>固定待機でジッターは消えません。操作刻みは同期精度を保証しません。曲・機種変更時に未保存の調整は引き継ぎません。</p>
         {!active && <p><a href={mode === 'real' ? `${import.meta.env.BASE_URL}?mode=simulation` : import.meta.env.BASE_URL}>{mode === 'real' ? '模擬モードへ切替' : '実接続モードへ切替'}</a>（画面設定とログはリセット）</p>}
       </div></details>
+    </div></details>
     </div>
   </main>;
 }

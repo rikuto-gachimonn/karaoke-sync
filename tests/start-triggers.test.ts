@@ -130,11 +130,11 @@ describe('v3保存と旧データ保護',()=>{
 
 describe('日本語UIと誤解防止',()=>{
   it.each(startTriggers)('%sの選択と位置欄を表示し音声認識と誤認させない',startTrigger=>{
-    const change=vi.fn();const html=renderToStaticMarkup(createElement(StartTriggerSettings,{input:input(startTrigger),disabled:false,onChange:change}));for(const title of ['伴奏検知','歌声トリガー','発声合図','手動開始'])expect(html).toContain(title);
-    if(startTrigger==='vocal')expect(html).toContain('話者を識別しません');if(startTrigger==='cue')expect(html).toContain('言葉の認識');if(startTrigger==='manual')expect(html).toContain('マイクは取得せず');expect(change).not.toHaveBeenCalled();
+    const change=vi.fn();const html=renderToStaticMarkup(createElement(StartTriggerSettings,{input:input(startTrigger),disabled:false,onChange:change}));for(const title of ['伴奏検知','歌声検知'])expect(html).toContain(title);
+    expect(html).toContain('話者を識別しません');expect(html).not.toContain('<option value="cue"');expect(html).not.toContain('<option value="manual"');expect(change).not.toHaveBeenCalled();
   });
-  it('待機中は方式変更を無効にし手動開始ボタンは準備完了時だけ有効にする',()=>{
-    vi.stubGlobal('localStorage',storage());const app=createApp('simulation');vi.spyOn(app.controller,'getSnapshot').mockReturnValue({...app.controller.getSnapshot(),phase:'armed',canPrepare:false});const html=renderToStaticMarkup(createElement(App,app));expect(html).toMatch(/<fieldset disabled=""><label>開始トリガー/);expect(html).toContain('開始トリガー比較JSONを保存');expect(html).toContain('Bluetooth発音・同期精度');
+  it('待機中はモード変更を無効にし旧比較JSONは診断パネルに保持する',()=>{
+    vi.stubGlobal('localStorage',storage());const app=createApp('simulation');vi.spyOn(app.controller,'getSnapshot').mockReturnValue({...app.controller.getSnapshot(),phase:'armed',canPrepare:false});const html=renderToStaticMarkup(createElement(App,app));expect(html).toMatch(/<fieldset disabled=""><label>検知モード/);expect(html).toContain('開始トリガー比較JSONを保存');expect(html).toContain('Bluetooth発音・同期精度');
   });
   it('設定読込・表示だけではv3への書込をしない',()=>{const st=storage();vi.stubGlobal('localStorage',st);const html=renderToStaticMarkup(createElement(App,createApp('simulation')));expect(html).toContain('マイク音量');expect(html).toContain('しきい値を測定・提案');expect(st.setItem).not.toHaveBeenCalled();});
 });
