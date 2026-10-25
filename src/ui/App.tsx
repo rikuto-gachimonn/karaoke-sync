@@ -8,6 +8,7 @@ import { phaseLabels } from '../session/controller';
 import { compensationDefaults, type Compensation } from '../youtube-probe/compensation';
 import { saveSyncProfile, loadSyncProfile } from '../app/preferences';
 import { SongLibrary, emptyLibrary, defaultProfile, setSongProfile, type Library, type Song, type Service } from '../library/model';
+import { planAudioSettings } from '../library/audioSettings';
 import { selectSong } from '../library/selection';
 import { SongLibraryPanel } from './SongLibraryPanel';
 import { openPanel } from './navigation';
@@ -50,7 +51,9 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     threshold: settings.normalThreshold, durationMs: settings.normalDurationMs,
     playbackMode: mode === 'real' ? 'preplay' : 'legacy', compensation: { ...compensationDefaults }, armedTimeoutMs: settings.defaultArmedTimeoutMs,
   });
-  const active = !state.canPrepare || switchingSong || measurement.busy;
+  const [audioPlan, setAudioPlan] = useState<ReturnType<typeof planAudioSettings>>();
+  const [applyingAudio, setApplyingAudio] = useState(false);
+  const active = !state.canPrepare || switchingSong || measurement.busy || applyingAudio || !!audioPlan;
   function libraryChanged(next: Library) {
     setLibrary(next);
     if (selectedVideoId && !next.songs.some(song => song.videoId === selectedVideoId)) {
@@ -87,6 +90,29 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       } else { saveSyncProfile(localStorage, { input: next, retainMic }, 3); setSaveMessage('手入力動画・環境の同期設定をv3専用領域へ保存しました。曲登録で曲リストへ引き継げます'); }
       return true;
     } catch (error) { setSaveMessage(`保存できません: ${String(error)}`); return false; }
+  }
+  function previewAudioSettings() {
+    if (active) return;
+    try {
+      if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
+      setAudioPlan(planAudioSettings(library, { threshold: input.threshold, durationMs: input.durationMs },
+        (videoId, service) => loadSyncProfile(localStorage, videoId, service, 3)));
+      setSaveMessage('');
+    } catch (error) { setSaveMessage(`一括適用できません: ${String(error)}`); }
+  }
+  async function applyAudioSettings() {
+    if (!audioPlan || applyingAudio) return;
+    setApplyingAudio(true);
+    setSaveMessage('音検知設定を適用中…');
+    // Allow the busy state to paint before the synchronous, single-key commit.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    try {
+      if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
+      if (JSON.stringify(libraryStatus.store.snapshot()) !== audioPlan.source) throw new Error('確認中に曲リストが更新されました。内容を確認してやり直してください');
+      libraryChanged(libraryStatus.store.commit(audioPlan.library));
+      setSaveMessage(`${audioPlan.songCount}曲・${audioPlan.profileCount}件の設定に音検知設定を適用しました。未保存の機種設定は追加していません`);
+    } catch (error) { setSaveMessage(`一括適用に失敗しました: ${String(error)}`); }
+    finally { setApplyingAudio(false); setAudioPlan(undefined); }
   }
   function numeric(key: 'savedPositionSec' | 'offsetSec' | 'threshold' | 'durationMs', value: string) {
     setInput(previous => ({ ...previous, [key]: value === '' ? NaN : Number(value) }));
@@ -223,8 +249,13 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
             setInput(saved.input); setRetain(saved.retainMic); setRetainMic(saved.retainMic); setSaveMessage('設定を復元しました。次の準備から適用します');
           } catch (error) { setSaveMessage(`復元できません: ${String(error)}`); }
         }}>この動画・機種の設定を復元</button></div>
+        <button onClick={previewAudioSettings}>音検知設定を全曲に適用</button>
         <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
-      </fieldset><p role="status" className="save-status">{saveMessage}</p><button aria-controls="calibration-panel" onClick={()=>openPanel('calibration-panel')}>しきい値を測定・提案</button></section>
+      </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
+        <h2 id="audio-apply-title">音検知設定の一括適用</h2>
+        <p id="audio-apply-description">現在の音量しきい値{audioPlan.values.threshold}、検知継続時間{audioPlan.values.durationMs}msを保存済みの全曲に適用します。既存の音検知設定は上書きされます。よろしいですか？（対象: {audioPlan.songCount}曲・{audioPlan.profileCount}件）</p>
+        <div className="actions"><button autoFocus disabled={applyingAudio} onClick={() => { setAudioPlan(undefined); setSaveMessage('一括適用をキャンセルしました'); }}>キャンセル</button><button disabled={applyingAudio} onClick={() => { void applyAudioSettings(); }}>{applyingAudio ? '適用中…' : '適用'}</button></div>
+      </div>}<p role="status" className="save-status">{saveMessage}</p><button aria-controls="calibration-panel" onClick={()=>openPanel('calibration-panel')}>しきい値を測定・提案</button></section>
 
     </div>
     <div className="tools-area">
