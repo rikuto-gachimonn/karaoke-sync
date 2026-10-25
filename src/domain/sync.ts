@@ -24,6 +24,8 @@ export interface SyncInput {
   offsetSec: number;
   threshold: number;
   durationMs: number;
+  /** Missing in saved v1–v4 data means OFF; only new profiles opt in. */
+  autoCompensateDetectionDuration?: boolean;
   playbackMode?: 'legacy' | 'preplay';
   compensation?: Compensation;
   armedTimeoutMs?: number;
@@ -40,6 +42,7 @@ export function validateInput(input: SyncInput): void {
   if (!Number.isFinite(input.offsetSec) || Math.abs(input.offsetSec) > settings.maxOffsetSec) throw new Error('補正は-30〜30秒です');
   if (!Number.isFinite(input.threshold) || input.threshold < 0 || input.threshold > 1) throw new Error('しきい値は0〜1です');
   if (!Number.isInteger(input.durationMs) || input.durationMs < 0 || input.durationMs > settings.maxDurationMs) throw new Error('継続時間は0〜2000msの整数です');
+  if (input.autoCompensateDetectionDuration !== undefined && typeof input.autoCompensateDetectionDuration !== 'boolean') throw new Error('検知継続時間の自動補正設定が不正です');
   if (input.playbackMode !== undefined && !['legacy', 'preplay'].includes(input.playbackMode)) throw new Error('再生方式が不正です');
   if (input.startTrigger !== undefined && !startTriggers.includes(input.startTrigger)) throw new Error('開始トリガーが不正です');
   for (const value of [input.vocalPositionSec,input.cuePositionSec]) if (value !== undefined && (!Number.isFinite(value)||value<0)) throw new Error('歌声・発声合図の開始位置は0以上の有限数です');
@@ -63,12 +66,16 @@ export function adjustPosition(value: number, steps: number): number {
 
 export const environments = ['DAM', 'JOYSOUND', 'HOME'] as const;
 export const environmentLabels = { DAM: 'DAM', JOYSOUND: 'JOYSOUND', HOME: '自宅テスト（PC＋スピーカー）' } as const;
+export function detectionCompensationMs(input: SyncInput): number {
+  return input.autoCompensateDetectionDuration === true && ['vocal', 'accompaniment'].includes(selectedTrigger(input)) ? input.durationMs : 0;
+}
 export function positionComponentsMs(input: SyncInput) {
   const baseMs = Math.max(0, Math.round(triggerPosition(input) * 1000) + Math.round(input.offsetSec * 1000));
   const bMs = effectiveCompensation(input.compensation ?? { mode: 'baseline', waitMs: 0, offsetMs: 0 }).offsetMs;
   const adjustmentMs = input.startAdjustmentMs ?? 0;
   if (![baseMs, bMs, adjustmentMs, baseMs + bMs + adjustmentMs].every(Number.isSafeInteger)) throw new Error('開始位置を安全な整数msで表現できません');
-  return { baseMs, bMs, adjustmentMs, effectiveMs: Math.max(0, baseMs + bMs + adjustmentMs) };
+  const detectionMs = detectionCompensationMs(input);
+  return { baseMs, bMs, adjustmentMs, detectionMs, effectiveMs: Math.max(0, baseMs + bMs + adjustmentMs + detectionMs) };
 }
 /** 末尾の主調整だけを更新する。既存オフセットやBへ同じ値を書き込まない。 */
 export function adjustEffectiveStart(input: SyncInput, deltaMs: number): SyncInput {
@@ -86,14 +93,15 @@ export function adoptThreshold(input:SyncInput,value:number):SyncInput {
   return {...input,threshold:value};
 }
 
-/** 保存基準は不変。安定化待機を位置へ加算し、残る負位置は追加待機へ変換する。 */
+/** 保存基準は不変。選択した検知時間と安定化待機を一度だけ加算し、負位置は追加待機へ変換する。 */
 export function playbackPlan(input: SyncInput) {
   const {bMs,adjustmentMs}=positionComponentsMs(input);
-  const userPositionMs=Math.round(triggerPosition(input)*1000)+Math.round(input.offsetSec*1000)+bMs+adjustmentMs;
+  const detectionMs=detectionCompensationMs(input);
+  const userPositionMs=Math.round(triggerPosition(input)*1000)+Math.round(input.offsetSec*1000)+bMs+adjustmentMs+detectionMs;
   const stabilizationMs=input.stabilizationWaitMs??0;
   if(!Number.isInteger(stabilizationMs)||stabilizationMs<0||stabilizationMs>60000) throw new Error('安定化待機が不正です');
   const rawMs=userPositionMs+stabilizationMs;
   if(!Number.isSafeInteger(rawMs)) throw new Error('開始位置を整数msで表現できません');
   const fixedWaitMs=effectiveCompensation(input.compensation ?? {mode:'baseline',waitMs:0,offsetMs:0}).waitMs;
-  return {rawMs,userPositionMs,stabilizationMs,fixedWaitMs,seekSec:Math.max(0,rawMs)/1000,negativeWaitMs:Math.max(0,-rawMs),waitMs:fixedWaitMs+stabilizationMs+Math.max(0,-rawMs)};
+  return {rawMs,userPositionMs,detectionMs,stabilizationMs,fixedWaitMs,seekSec:Math.max(0,rawMs)/1000,negativeWaitMs:Math.max(0,-rawMs),waitMs:fixedWaitMs+stabilizationMs+Math.max(0,-rawMs)};
 }

@@ -39,7 +39,7 @@ describe('実効開始位置の整数ms調整', () => {
   it('既存オフセットと有効Bの後に主調整を一度だけ加算する', () => {
     const input = { ...initial(), offsetSec: -0.05, compensation: { mode: 'combined' as const, waitMs: 100, offsetMs: 200 } };
     const changed = adjustEffectiveStart(input, 10);
-    expect(positionComponentsMs(changed)).toEqual({ baseMs: 9950, bMs: 200, adjustmentMs: 10, effectiveMs: 10160 });
+    expect(positionComponentsMs(changed)).toEqual({ baseMs: 9950, bMs: 200, adjustmentMs: 10, detectionMs: 0, effectiveMs: 10160 });
     expect(correctedPosition(startPosition(changed), 200 + changed.startAdjustmentMs!, 120).seekSec).toBeCloseTo(10.16, 10);
   });
   it.each(['baseline', 'wait', 'position', 'combined'] as const)('旧%s設定の主調整未定義は0として従来計算と一致', mode => {
