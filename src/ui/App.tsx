@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppServices } from '../app/createApp';
 import { LiveHistory, liveRecommendation } from '../domain/liveRecommendation';
 import { aggregateSessionLogs, latencySummary } from '../diagnostics/latency';
@@ -26,6 +26,17 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   const trialSnapshot=useMemo(()=>controller.exportTrials(),[controller,logVersion]);
   const latency=useMemo(()=>latencySummary(trialSnapshot.trials),[trialSnapshot]);
   const measurement = useSyncExternalStore(calibration.subscribe, calibration.getSnapshot, calibration.getSnapshot);
+  const [audioExpanded, setAudioExpanded] = useState(true);
+  const audioSettingsRef = useRef<HTMLDetailsElement>(null);
+  useLayoutEffect(() => {
+    const expand = () => {
+      if (audioSettingsRef.current) audioSettingsRef.current.open = true;
+      setAudioExpanded(true);
+    };
+    expand();
+    window.addEventListener('pageshow', expand);
+    return () => window.removeEventListener('pageshow', expand);
+  }, []);
   const [retainMic, setRetain] = useState(true);
   const [saveMessage, setSaveMessage] = useState('');
   const [historyStatus]=useState(()=>{try{return {store:new LiveHistory(localStorage),error:''};}catch(error){return {store:undefined,error:String(error)};}});
@@ -161,7 +172,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <p>{library.songs.find(song => song.videoId === selectedVideoId)?.artist || input.videoId || '曲を選択してください'}</p></div>
         <button aria-controls="song-picker" onClick={() => openPanel('song-picker')}>曲を変更</button>
       </section>
-      <details id="audio-settings" className="normal-settings tool-panel" open><summary>音声検知</summary><div className="panel-body"><fieldset disabled={active}><legend>音検知・設定保存</legend>
+      <details id="audio-settings" className="normal-settings tool-panel" ref={audioSettingsRef} open={audioExpanded} onToggle={event => setAudioExpanded(event.currentTarget.open)}><summary>音声検知</summary><div className="panel-body"><fieldset disabled={active}><legend>音検知・設定保存</legend>
         <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
         <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
         <div className="actions"><button onClick={() => saveCurrentSettings()}>この曲・機種の設定を保存</button><button onClick={() => {

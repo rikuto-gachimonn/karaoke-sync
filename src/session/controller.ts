@@ -3,7 +3,7 @@ import { sessionOptions, settings, type SessionOptions } from '../config/setting
 import { LeaseReleaser } from './leaseReleaser';
 import { DiagnosticLog } from '../diagnostics/log';
 import { playbackPlan, startPosition, selectedTrigger, validateInput, type SyncInput } from '../domain/sync';
-import type { AudioLease, Detector, Player, PlayerEvent, SessionDependencies, Unsubscribe } from './ports';
+import type { PlaybackObservation, AudioLease, Detector, Player, PlayerEvent, SessionDependencies, Unsubscribe } from './ports';
 import { AudioAcquireError, AudioStartError } from './ports';
 import { trialExport, type TriggerTrial } from '../diagnostics/trials';
 import { initialState, sessionReducer, type Phase, type SessionState } from './state';
@@ -437,6 +437,19 @@ export class SessionController {
     if (!context || !this.valid(context) || ['stopping', 'error', 'ended'].includes(this.state.phase)) return;
     const value = context.player.position?.();
     return value !== undefined && Number.isFinite(value) && value >= 0 ? value : undefined;
+  }
+  /** Read-only UI observation; never changes playback or synchronization. */
+  async displayPlaybackObservation(): Promise<PlaybackObservation | undefined> {
+    const context = this.current;
+    if (!context || !this.valid(context) || ['stopping', 'error', 'ended'].includes(this.state.phase)) return;
+    const observed = await context.player.readPlaybackState();
+    if (!this.valid(context) || ['stopping', 'error', 'ended'].includes(this.state.phase)) return;
+    const position = this.displayPlaybackPosition();
+    if (position === undefined) return;
+    const rate = context.player.playbackRate?.() ?? 1;
+    const duration = context.player.duration?.();
+    return { position, playing: observed === 'playing', rate,
+      duration: duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : undefined };
   }
   playbackPosition(): number | undefined {
     const context=this.current;
