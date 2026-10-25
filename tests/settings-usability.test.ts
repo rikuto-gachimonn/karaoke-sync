@@ -42,6 +42,8 @@ describe('4段階調整と設定整理', () => {
     const normal = html.slice(html.indexOf('class="normal-settings"'),html.indexOf('</section>',html.indexOf('class="normal-settings"')));
     expect(normal).toContain('音量しきい値'); expect(normal).toContain('継続時間'); expect(normal).toContain('この曲・機種の設定を保存');
     expect(normal).not.toContain('同期補正方式');
+    expect(normal).toContain('音検知設定を全曲に適用');
+    expect(normal).not.toContain('role="alertdialog"');
     const dev = html.slice(html.indexOf('<details id="developer-settings"'),html.indexOf('<summary>模擬イベント操作'));
     expect(dev.match(/^<details[^>]*>/)?.[0]).not.toContain('open=');
     for(const label of ['同期補正方式','固定待機','B 追加位置補正','既存オフセット','検知待機期限','検知後のマイク資源']) expect(dev).toContain(label);
