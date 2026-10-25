@@ -21,10 +21,10 @@ describe('カラオケ中の表示と停止導線', () => {
     expect(html.slice(meter, video)).not.toContain('<button');
     expect(html.match(/id="youtube-host"/g)).toHaveLength(1);
   });
-  it.each(['playing', 'paused', 'buffering', 'starting'] as const)('%sでは開始前入力をDOMに残して隠し、停止を時刻の右側に表示', phase => {
+  it.each(['playing', 'paused', 'buffering', 'starting'] as const)('%sでは開始前入力は再展開できるDOMに残し、停止を時刻の右側に表示', phase => {
     const html = render(phase);
     expect(html).toMatch(/<button[^>]*class="primary prepare"[^>]*hidden/);
-    for (const id of ['audio-settings', 'correction-panel', 'settings-panel', 'developer-settings']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).toContain('hidden');
+    for (const id of ['audio-settings', 'correction-panel', 'settings-panel', 'developer-settings']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toContain('hidden');
     const row = html.slice(html.indexOf('class="playback-time-main"'), html.indexOf('class="tool-links"'));
     expect(row).toContain('すべてを停止'); expect(row.indexOf('YouTube現在再生時刻')).toBeLessThan(row.indexOf('すべてを停止'));
     expect(html).toContain('今合ってる（現在位置を保存）'); expect(html).toContain('開始位置を50ms戻す');
