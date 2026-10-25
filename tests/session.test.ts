@@ -283,14 +283,14 @@ describe('domain and diagnostics', () => {
   it('継続時間0msは1観測で成立し1回で終了', () => {
     const detector = new SustainedVolumeDetector(); const callback = vi.fn();
     detector.arm({ threshold: 0, durationMs: 0 }, callback);
-    detector.sample({ rms: 0, timeMs: 0 }); expect(callback).not.toHaveBeenCalled();
+    detector.sample({ rms: 0, timeMs: 0 }); expect(callback).toHaveBeenCalledTimes(1);
     detector.sample({ rms: 0.1, timeMs: 1 }); detector.sample({ rms: 0.2, timeMs: 2 });
     expect(callback).toHaveBeenCalledTimes(1);
   });
   it('連続時間は境界で成立し、無音と観測欠落でリセット', () => {
     const detector = new SustainedVolumeDetector(); const callback = vi.fn();
     detector.arm({ threshold: 0.08, durationMs: 50 }, callback);
-    for (const sample of [{ rms: 0.2, timeMs: 0 }, { rms: 0.2, timeMs: 49 }, { rms: 0.08, timeMs: 50 }, { rms: 0.2, timeMs: 60 }, { rms: 0.2, timeMs: 200 }, { rms: 0.2, timeMs: 249 }]) detector.sample(sample);
+    for (const sample of [{ rms: 0.2, timeMs: 0 }, { rms: 0.2, timeMs: 49 }, { rms: 0.079, timeMs: 50 }, { rms: 0.2, timeMs: 60 }, { rms: 0.2, timeMs: 200 }, { rms: 0.2, timeMs: 249 }]) detector.sample(sample);
     expect(callback).not.toHaveBeenCalled(); detector.sample({ rms: 0.2, timeMs: 250 }); expect(callback).toHaveBeenCalledTimes(1);
   });
   it('旧世代の状態イベントを破棄する', () => {

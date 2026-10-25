@@ -14,7 +14,7 @@ function render(patch: Partial<SessionState> = {}, mode: 'real' | 'simulation' =
   return renderToStaticMarkup(createElement(App, services));
 }
 function button(html: string, name: string) {
-  const result = [...html.matchAll(/<button\b([^>]*)>([^<]*)<\/button>/g)].find(match => match[2] === name);
+  const result = [...html.matchAll(/<button\b([^>]*)>([^<]*)<\/button>/g)].find(match => match[2] === name && !/\bhidden=/.test(match[1]!));
   if (!result) throw new Error(`button missing: ${name}`);
   return result[1]!;
 }
@@ -29,9 +29,9 @@ describe('スマートフォン向けメイン画面', () => {
     expect(html.match(/id="youtube-host"/g)).toHaveLength(1);
     expect(html).toMatch(/<fieldset[^>]*disabled=""[^>]*class="correction-controls"/);
   });
-  it('音声検知設定を最初に開き、音量・操作・動画・再生時刻の順に並べる', () => {
+  it('音声検知設定を最初に開き、操作・音量・動画・再生時刻の順に並べる', () => {
     const html = render();
-    const markers = ['class="app-header"', 'id="current-song"', 'id="audio-settings"', 'class="service-picker"', 'aria-label="マイク音量メーター"', 'class="session-card"', 'id="youtube-host"', 'aria-label="YouTube現在再生時刻"', 'class="tool-links"', 'class="correction-card"'];
+    const markers = ['class="app-header"', 'id="current-song"', 'id="audio-settings"', 'class="service-picker"', 'class="session-card"', 'aria-label="マイク音量メーター"', 'id="youtube-host"', 'aria-label="YouTube現在再生時刻"', 'class="tool-links"', 'class="correction-card"'];
     const indexes = markers.map(marker => html.indexOf(marker));
     expect(indexes.every(index => index >= 0)).toBe(true);
     expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
@@ -51,10 +51,10 @@ describe('スマートフォン向けメイン画面', () => {
   });
   it('未準備時は準備と停止だけを有効にする', () => {
     const html = render(); expect(button(html, '検知を開始')).not.toContain('disabled'); expect(button(html, 'すべてを停止')).not.toContain('disabled');
-    expect(button(html, '一時停止')).toContain('disabled'); expect(button(html, '再生')).toContain('disabled');
+    expect(html).not.toContain('>一時停止</button>'); expect(html).not.toContain('>再生</button>');
   });
   it.each(['preplay', 'armed', 'stopping'] as const)('%sでは準備連打・補正操作・不正な再開を許可しない', phase => {
-    const html = render({ phase, canPrepare: false }); expect(button(html, '検知を開始')).toContain('disabled'); expect(button(html, '再生')).toContain('disabled');
+    const html = render({ phase, canPrepare: false }); expect(button(html, '検知を開始')).toContain('disabled'); expect(html).not.toContain('>再生</button>');
     expect(html).toMatch(/<fieldset[^>]*disabled=""[^>]*class="correction-controls"/);
     expect(button(html, 'すべてを停止')).not.toContain('disabled');
     if (phase === 'armed') expect(html).toContain('音検知待機中');

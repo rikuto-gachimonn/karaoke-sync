@@ -58,8 +58,8 @@ describe('YouTubeエラーの説明とリンク',()=>{
 });
 describe('簡素化したメイン画面',()=>{
   function render(){vi.stubGlobal('localStorage',{getItem:()=>null,setItem:vi.fn()});return renderToStaticMarkup(createElement(App,createApp('real')));}
-  it('主操作は残し補助の一時停止・再生を開発者パネルだけに置く',()=>{
-    const html=render();const start=html.indexOf('class="session-card"');const session=html.slice(start,html.indexOf('</section>',start));expect(session).toContain('検知を開始');expect(session).toContain('すべてを停止');expect(session).not.toContain('>一時停止</button>');expect(session).not.toContain('>再生</button>');const dev=html.slice(html.indexOf('id="developer-settings"'));expect(dev).toContain('>一時停止</button>');expect(dev).toContain('>再生</button>');expect(html.match(/id="youtube-host"/g)).toHaveLength(1);expect(html).toContain('YouTube内の▶をタップ');
+  it('開始前は準備と停止を表示し一時停止・再生の重複を置かない',()=>{
+    const html=render();const start=html.indexOf('class="session-card"');const session=html.slice(start,html.indexOf('</section>',start));expect(session).toContain('検知を開始');expect(session).toContain('すべてを停止');expect(session).not.toContain('>一時停止</button>');expect(session).not.toContain('>再生</button>');const dev=html.slice(html.indexOf('id="developer-settings"'));expect(dev).not.toContain('>一時停止</button>');expect(dev).not.toContain('>再生</button>');expect(html.match(/id="youtube-host"/g)).toHaveLength(1);expect(html).toContain('YouTube内の▶をタップ');
   });
   it('調整は初期収納しサマリーの現在値と4段階の入力を同じDOMに保持する',()=>{
     const html=render();const panel=html.match(/<details id="correction-panel"[^>]*>/)![0];expect(panel).not.toMatch(/\bopen(?:=|\s|>)/);const start=html.indexOf('id="correction-panel"');const summary=html.slice(start,html.indexOf('</summary>',start));expect(summary).toContain('実効開始位置の調整');expect(summary).toContain('0.000 秒');for(const step of [5000,1000,100,10])expect(html).toContain('開始位置を'+step+'ms進める');expect(localStorage.setItem).not.toHaveBeenCalled();

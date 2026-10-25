@@ -22,7 +22,7 @@ export class SustainedVolumeDetector implements Detector {
     }
     if (this.last !== undefined && (timeMs <= this.last || timeMs - this.last > settings.maxSampleGapMs)) this.since = undefined;
     this.last = timeMs;
-    if (rms <= this.config.threshold) { this.since = undefined; return; }
+    if (rms < this.config.threshold) { this.since = undefined; return; }
     if (this.since === undefined) { this.since = timeMs; this.firstExceeded?.({ rms, timeMs }); }
     if (timeMs - this.since >= this.config.durationMs) {
       const callback = this.callback;

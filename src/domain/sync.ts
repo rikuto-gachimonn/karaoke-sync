@@ -3,7 +3,7 @@ import { effectiveCompensation, type Compensation } from '../youtube-probe/compe
 
 export const startTriggers = ['accompaniment', 'vocal', 'cue', 'manual'] as const;
 export type StartTrigger = typeof startTriggers[number];
-export const triggerLabels: Record<StartTrigger,string> = { accompaniment:'伴奏検知', vocal:'歌声トリガー', cue:'発声合図', manual:'手動開始' };
+export const triggerLabels: Record<StartTrigger,string> = { accompaniment:'伴奏検知', vocal:'歌声検知', cue:'発声合図', manual:'手動開始' };
 export const triggerDescriptions: Record<StartTrigger,string> = {
   accompaniment:'従来どおり、伴奏のRMS音量で開始します。',
   vocal:'自分の歌い出しを合図にします。RMS音量だけで判定し、歌声や話者を識別しません。伴奏や雑音でも反応します。',

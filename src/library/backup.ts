@@ -1,4 +1,5 @@
-import { defaultProfile, decodeLibraryV3, decodeLibraryV2, duplicate, emptyLibrary, libraryLimits, validLibrary, validSong, type Library, type Service, type Song } from './model';
+import { mergeDetectionProfiles } from '../app/detectionModes';
+import { defaultProfile, decodeLibraryV4, decodeLibraryV3, decodeLibraryV2, duplicate, emptyLibrary, libraryLimits, validLibrary, validSong, type Library, type Service, type Song } from './model';
 import { environments } from '../domain/sync';
 
 export interface ImportData { library: Library; source: string; warnings: string[] }
@@ -16,10 +17,11 @@ function oldNumber(value: unknown, fallback: number): number {
 export function parseImport(raw: string, unassignedService?: Service): ImportData {
   if (new Blob([raw]).size > libraryLimits.backupBytes) throw new Error('JSONは5MiB以内にしてください');
   const data = object(JSON.parse(raw.replace(/^\uFEFF/, '')));
+  if (data.format === 'karaokesync-library-v4') return { library: decodeLibraryV4(data), source: 'React版 v4（モード別）', warnings: [] };
   if (data.format === 'karaokesync-library-v3') return { library: decodeLibraryV3(data), source: 'React版 v3', warnings: [] };
   if (data.format === 'karaokesync-library-v2') return { library: decodeLibraryV2(data), source: 'React版 v2', warnings: [] };
   if (data.format === 'karaokesync-library') return { library: validLibrary(data), source: 'React版 v1', warnings: [] };
-  if (data.appName !== 'Karaoke Sync' || data.backupVersion !== '0.6' || !Array.isArray(data.songs) || data.songs.length > libraryLimits.songs) throw new Error('対応形式はReact版v1/v2/v3または旧HTML版バックアップ0.6です');
+  if (data.appName !== 'Karaoke Sync' || data.backupVersion !== '0.6' || !Array.isArray(data.songs) || data.songs.length > libraryLimits.songs) throw new Error('対応形式はReact版v1/v2/v3/v4または旧HTML版バックアップ0.6です');
   const warnings: string[] = ['旧形式は動画単位で機種別の設定を持ちません。記録された機種だけへ割り当て、他方には複製しません。旧キーは変更しません。'];
   const songs: Song[] = data.songs.map(value => {
     const old = object(value);
@@ -61,7 +63,9 @@ export function mergeImport(current: Library, incoming: Library, choices: Import
     if (index < 0) { if (choice.add) songs.push(structuredClone(song)); continue; }
     const existing = songs[index]!;
     if (choice.metadata) { existing.title = song.title; existing.artist = song.artist; if (song.accompanimentRef !== undefined) existing.accompanimentRef = song.accompanimentRef; }
-    for (const service of environments) if (choice.profiles[service] && song.profiles[service]) existing.profiles[service] = structuredClone(song.profiles[service]);
+    for (const service of environments) if (choice.profiles[service] && song.profiles[service]) {
+      existing.profiles[service] = mergeDetectionProfiles(existing.profiles[service], song.profiles[service]);
+    }
   }
   return validLibrary({ ...current, songs });
 }
