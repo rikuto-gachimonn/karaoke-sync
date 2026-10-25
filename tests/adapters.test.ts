@@ -293,6 +293,14 @@ describe('Web Audio/getUserMedia adapter契約', () => {
 });
 
 describe('通常プレイヤーの検知時シーク', () => {
+  it('表示用の速度取得はgetPlaybackRateを読み、再生やシークを要求しない', async () => {
+    const s = youtube(); const getPlaybackRate = vi.fn(() => .5);
+    Object.assign(s.handle, { getPlaybackRate }); await s.prepare();
+    expect(s.player.playbackRate()).toBe(.5); expect(getPlaybackRate).toHaveBeenCalledTimes(1);
+    expect(s.handle.playVideo).not.toHaveBeenCalled();
+    delete (s.handle as unknown as { getPlaybackRate?: () => number }).getPlaybackRate;
+    expect(s.player.playbackRate()).toBe(1);
+  });
   it('公式seekToを使い動画長と現在位置を取得する。シーク自体でplayしない', async () => {
     const s = youtube(); const seekTo = vi.fn();
     Object.assign(s.handle, { seekTo, getDuration: () => 120, getCurrentTime: () => 12.35 });

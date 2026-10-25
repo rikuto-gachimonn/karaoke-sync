@@ -9,6 +9,7 @@ export type PlayerEvent =
 // pauseの完了は停止確認、disposeの完了は確実な破棄を意味する契約。
 // requestIdは由来を証明できる模擬等のみ。YouTubeイベントへ現在番号を後付けしない。
 // readPlaybackStateはイベントのラベルではなく、問い合わせ時の現在状態を返す。
+export interface PlaybackObservation { position: number; playing: boolean; rate: number; duration?: number }
 export interface Player {
   prepare(videoId: string, startSec: number): Promise<void>;
   play(requestId: number): void;
@@ -18,6 +19,7 @@ export interface Player {
   seek?(positionSec: number): void;
   duration?(): number;
   position?(): number;
+  playbackRate?(): number;
   subscribe(listener: (event: PlayerEvent) => void): Unsubscribe;
 }
 

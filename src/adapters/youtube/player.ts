@@ -83,6 +83,11 @@ export class YouTubePlayer implements Player {
     return (this.handle as YouTubeHandle & { getCurrentTime(): number }).getCurrentTime();
   }
 
+  playbackRate(): number {
+    if (this.closed || !this.ready || !this.handle) throw new Error('動画が準備できていません');
+    return (this.handle as YouTubeHandle & { getPlaybackRate?(): number }).getPlaybackRate?.() ?? 1;
+  }
+
   async pause(): Promise<void> {
     if (this.closed || !this.ready || !this.handle) return;
     this.handle.pauseVideo();
