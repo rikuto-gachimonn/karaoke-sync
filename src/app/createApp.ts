@@ -1,3 +1,6 @@
+import { PositionPreviewController } from '../preview/controller';
+import { BrowserPreviewTone } from '../preview/tone';
+import { SimulatedPreviewPlayer } from '../preview/simulation';
 import { createSimulation } from '../adapters/simulation';
 import { SessionController } from '../session/controller';
 import { DiagnosticLog } from '../diagnostics/log';
@@ -23,9 +26,17 @@ export function createApp(mode: 'real' | 'simulation' = 'real', host: () => HTML
   };
   const meter = new MeteredAudioInput(dependencies.audio);
   let calibration: CalibrationController;
-  const controller = new SessionController({ ...dependencies, audio: meter, allowPrepare: () => !calibration?.getSnapshot().busy && !meter.busy }, log, options);
-  calibration = new CalibrationController(meter, () => controller.stop(), () => controller.getSnapshot().canPrepare, diagnostic);
-  const stopAll = async () => { await calibration.cancel(); await controller.stop(); };
-  return { controller, simulation, mode, meter, calibration, stopAll, setRetainMic: (value: boolean) => { if (controller.getSnapshot().canPrepare) options.retainMic = value; } };
+  let preview: PositionPreviewController;
+  const controller = new SessionController({ ...dependencies, audio: meter, allowPrepare: () => !calibration?.getSnapshot().busy && !meter.busy && !preview?.getSnapshot().busy }, log, options);
+  calibration = new CalibrationController(meter, () => controller.stop(), () => controller.getSnapshot().canPrepare && !preview?.getSnapshot().busy, diagnostic);
+  preview = new PositionPreviewController({
+    createPlayer: mode === 'simulation' ? () => new SimulatedPreviewPlayer() : dependencies.createPlayer,
+    createTone: () => new BrowserPreviewTone(),
+    canStart: () => controller.getSnapshot().canPrepare && !calibration.getSnapshot().busy && !meter.busy,
+    hidden: () => document.hidden,
+    onHidden: callback => { const changed = () => { if (document.hidden) callback(); }; document.addEventListener('visibilitychange', changed); return () => document.removeEventListener('visibilitychange', changed); },
+  });
+  const stopAll = async () => { const endingPreview = preview.stop(); await calibration.cancel(); await controller.stop(); await endingPreview; };
+  return { controller, preview, simulation, mode, meter, calibration, stopAll, setRetainMic: (value: boolean) => { if (controller.getSnapshot().canPrepare) options.retainMic = value; } };
 }
 export type AppServices = ReturnType<typeof createApp>;

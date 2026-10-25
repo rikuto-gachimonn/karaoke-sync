@@ -170,3 +170,12 @@ caption { text-align: left; margin-bottom: 8px; }
 .start-position-summary .position-explanation { font-size:.8rem; }
 .start-position-summary .start-position-result { font-size:1.25rem; }
 .start-position-breakdown { margin-top:10px; }
+
+.singing-position-input { margin-bottom:10px; }
+.singing-position-input input { font-variant-numeric:tabular-nums; }
+.preview-controls { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.preview-controls button { min-height:48px; min-width:0; white-space:normal; }
+.preview-status { padding:8px; background:#edf4f1; overflow-wrap:anywhere; }
+.correction-card .start-position-summary { margin:10px 0; }
+
+.preview-position { display:block; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }

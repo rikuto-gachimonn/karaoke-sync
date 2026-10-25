@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StartPositionSummary, formatPositionSeconds } from '../src/ui/StartPositionSummary';
-import { StartTriggerSettings } from '../src/ui/StartTriggerSettings';
+import { SingingPositionInput } from '../src/ui/SingingPositionInput';
 import { defaultDetectionProfile, existingDetectionProfile, withDetectionProfile, detectionModes } from '../src/app/detectionModes';
 import { playbackPlan, resetStartAdjustment, type SyncInput } from '../src/domain/sync';
 import { captureStartPosition, liveRecommendation } from '../src/domain/liveRecommendation';
@@ -12,7 +12,7 @@ const id='M7lc1UVf-VE';
 const input=():SyncInput=>({...defaultDetectionProfile(id,'DAM','vocal','simulation').input,vocalPositionSec:30,savedPositionSec:30});
 const output=(html:string,label:string)=>html.match(new RegExp(`<output aria-label="${label}">([^<]+)</output>`))?.[1];
 const render=(value:SyncInput)=>renderToStaticMarkup(createElement(StartPositionSummary,{input:value}));
-const renderInput=(value:SyncInput)=>renderToStaticMarkup(createElement(StartTriggerSettings,{input:value,disabled:false,onChange:vi.fn()}));
+const renderInput=(value:SyncInput)=>renderToStaticMarkup(createElement(SingingPositionInput,{input:value,disabled:false,onChange:vi.fn()}));
 describe('入力・補正量・開始候補の分離表示',()=>{
  it.each([[100,true,'＋0.10秒（100ms）','30.10 秒'],[200,true,'＋0.20秒（200ms）','30.20 秒'],[300,true,'＋0.30秒（300ms）','30.30 秒'],[200,false,'自動補正：OFF（＋0.00秒）','30.00 秒']] as const)('%ims/ON=%sを基準30.00と分ける',(durationMs,flag,auto,candidate)=>{const value={...input(),durationMs,autoCompensateDetectionDuration:flag};const before=structuredClone(value);const html=render(value);expect(output(html,'検知継続時間の自動補正量')).toBe(auto);expect(output(html,'補正後の再生開始候補')).toBe(candidate);expect(renderInput(value)).toContain('value="30.00"');expect(value).toEqual(before);});
  it('主調整-0.10と自動+0.20から30.10を表示し入力を変更しない',()=>{const value={...input(),startAdjustmentMs:-100};const html=render(value);expect(output(html,'手動補正量')).toBe('−0.10 秒');expect(output(html,'補正後の再生開始候補')).toBe('30.10 秒');expect(renderInput(value)).toContain('value="30.00"');});
