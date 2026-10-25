@@ -3,7 +3,7 @@ import type { AppServices } from '../app/createApp';
 import { LiveHistory, liveRecommendation, captureStartPosition } from '../domain/liveRecommendation';
 import { aggregateSessionLogs, latencySummary } from '../diagnostics/latency';
 import { settings } from '../config/settings';
-import { playbackPlan, triggerPosition, selectedTrigger, triggerLabels, adoptThreshold, adjustPosition, adjustEffectiveStart, environments, environmentLabels, type SyncInput } from '../domain/sync';
+import { playbackPlan, triggerPosition, selectedTrigger, triggerLabels, adoptThreshold, adjustPosition, adjustEffectiveStart, resetStartAdjustment, environments, environmentLabels, type SyncInput } from '../domain/sync';
 import { phaseLabels } from '../session/controller';
 import { compensationDefaults, type Compensation } from '../youtube-probe/compensation';
 import { defaultDetectionProfile, selectDetectionProfile, existingDetectionProfile, detectionModeFor, detectionModeLabels, withDetectionProfile, type DetectionMode } from '../app/detectionModes';
@@ -16,7 +16,6 @@ import { SongLibraryPanel } from './SongLibraryPanel';
 import { openPanel } from './navigation';
 import { StartTriggerSettings } from './StartTriggerSettings';
 import { VolumeMeter } from './VolumeMeter';
-import { ManualVideoInput } from './ManualVideoInput';
 import { YouTubeErrorHelp } from './YouTubeErrorHelp';
 import { ChromeOpen } from './ChromeOpen';
 import { PlaybackTime } from './PlaybackTime';
@@ -283,6 +282,8 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
             <button aria-label={`開始位置を${step}ms進める`} onClick={() => stepEffective(step)}>＋{step / 1000}秒</button>
           </div>)}
         </fieldset>
+        <button disabled={active || !input.startAdjustmentMs} onClick={() => { setInput(resetStartAdjustment(input)); setSaveMessage('主調整を0秒に戻しました。未保存です。「この設定を保存」で保存します。旧オフセット・比較補正は変更していません'); }}>補正を0秒に戻す</button>
+        <small>この操作は主調整だけを0にします。基準位置・旧オフセット・比較補正・検知時間の自動補正は維持します。</small>
         <p>停止後に調整 → 次の検知準備・初回検知時に適用。基準モードでも有効。</p>
         <small>主調整: {input.startAdjustmentMs ?? 0}ms。10ms刻みは同期精度の保証ではありません。</small>
         <p>表示は動画長制限前。負の位置は不足分だけ検知後に待機して0秒から再生。A固定待機とは加算し、動画長の上限は再生要求時に制限します。</p>
@@ -303,6 +304,8 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <h2>歌唱中の位置調整</h2>
         <div className="actions live-fine">{[-1000,-100,-50,50,100,1000].map(ms=><button key={ms} disabled={state.phase!=='playing'} onClick={()=>controller.adjustLive(ms)}>{ms>0?'＋':'−'}{Math.abs(ms)/1000}秒</button>)}</div>
         <div className="actions live-coarse" aria-label="5秒単位の調整">{[-5000,5000].map(ms=><button key={ms} disabled={state.phase!=='playing'} onClick={()=>controller.adjustLive(ms)}>{ms>0?'＋':'−'}5秒</button>)}</div>
+        <button className="reset-live" disabled={state.phase !== 'playing' || !state.liveAdjustmentMs} onClick={() => controller.resetLiveAdjustment()}>今回の補正を0秒に戻す</button>
+        <small>現在位置から今回の補正合計を逆向きに取り消します。動画端では取り消せた要求量だけ合計から引き、保存済み設定は変更しません。</small>
         <p>今回の移動要求合計: {state.liveAdjustmentMs??0}ms（実移動・発音精度は未保証）</p>
         <button disabled={!recommendation?.remainingMs||switchingSong||measurement.busy||(!state.canPrepare&&state.phase!=='playing')} onClick={adoptResult}>今回の調整を次回用に保存</button>
         <button disabled={state.phase!=='playing'} onClick={()=>{
@@ -327,17 +330,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
     <details hidden={playbackControls} id="settings-panel" className="tool-panel"><summary>詳細設定・設定の保存／復元</summary><div className="panel-body">
       <fieldset disabled={active}><legend>準備前に入力</legend>
         <label>再生方式<select value={input.playbackMode ?? 'legacy'} onChange={event => setInput({ ...input, playbackMode: event.target.value as SyncInput['playbackMode'] })}><option value="preplay">事前再生方式（推奨・iPhone向け）</option><option value="legacy">従来方式（事前再生なし・PC比較用）</option></select></label>
-        <ManualVideoInput videoId={input.videoId} onApply={videoId=>{
-          if(active)return;
-          if(videoId===input.videoId){setSaveMessage('同じ動画IDです。現在の同期設定を維持しました');return;}
-          try {
-            const existing = loadSyncProfile(localStorage, videoId, input.service, 4);
-            const profile = existing ? selectDetectionProfile(existing, videoId, input.service, detectionMode, mode) :
-              selectedVideoId ? defaultDetectionProfile(videoId, input.service, detectionMode, mode) : { input: { ...input, videoId, autoCompensateDetectionDuration: true }, retainMic };
-            setSelectedVideoId(undefined); modeDrafts.current.clear(); setInput(profile.input); setRetain(profile.retainMic); setRetainMic(profile.retainMic);
-            setSaveMessage('手入力動画を確定しました。モード別の保存設定と開始位置を確認してください');
-          } catch (error) { setSaveMessage(`保存設定を読み込めません: ${String(error)}`); }
-        }}/>
+
       </fieldset>
       <p>曲選択・機種変更時は未保存の編集を引き継ぎません。必要な調整は先に保存してください。</p>
       <p>開始設定は「検知を開始」時に確定し、検知成立時の初回シークに適用します。歌唱中は別枠の位置調整を利用できます。変更・動画切替は「すべて停止」後に行ってください。</p>

@@ -458,9 +458,18 @@ export class SessionController {
     return Number.isFinite(value) ? value : undefined;
   }
   adjustLive(deltaMs:number): void {
+    if(!Number.isSafeInteger(deltaMs) || Math.abs(deltaMs)>5000) return;
+    this.seekLive(deltaMs);
+  }
+  resetLiveAdjustment(): void {
+    const total=this.state.liveAdjustmentMs??0;
+    if(!Number.isSafeInteger(total) || total===0) return;
+    this.seekLive(-total, true);
+  }
+  private seekLive(deltaMs:number, reset=false): void {
     const context=this.current;
     if(!context || !this.valid(context) || this.state.phase!=='playing' || !context.desiredPlayback) return;
-    if(!Number.isSafeInteger(deltaMs) || Math.abs(deltaMs)>5000) return;
+    if(!Number.isSafeInteger(deltaMs)) return;
     try {
       const current=this.playbackPosition(), duration=context.player.duration?.();
       if(current===undefined || !Number.isFinite(duration) || !duration || duration<=0 || !context.player.seek) throw new Error('現在位置・動画長を確認できません');
@@ -475,7 +484,9 @@ export class SessionController {
       for (const delayMs of [250,1000]) this.schedule(context,delayMs,()=>{
         try {this.log.add(context.generation,'player.live.seek.observed',JSON.stringify({delayMs,positionSec:context.player.position?.(),requestedSec:targetMs/1000,audibleTiming:'unmeasured'}));}catch(error){this.log.add(context.generation,'player.live.seek.observe.failed',errorText(error));}
       });
-      this.update({liveAdjustmentMs:(this.state.liveAdjustmentMs??0)+appliedMs,notice:'再生位置変更を要求しました。実発音と微小シーク精度は未確認です'});
+      const total=context.trial.liveAdjustmentMs;
+      if(reset) this.log.add(context.generation,'player.live.reset',JSON.stringify({requestedMs:deltaMs,appliedMs,remainingMs:total}));
+      this.update({liveAdjustmentMs:total,notice:reset ? (total===0 ? '今回の補正を取り消すシークを要求しました。保存済み設定は変更していません' : `動画端のため補正をすべて取り消せません。残り${total}ms。保存済み設定は変更していません`) : '再生位置変更を要求しました。実発音と微小シーク精度は未確認です'});
     } catch(error) {this.update({notice:'位置調整できません: '+errorText(error)});}
   }
   private microphoneInterrupted(context:Context,message:string):void {

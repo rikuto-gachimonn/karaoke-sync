@@ -63,7 +63,7 @@ export function SongLibraryPanel(props: Props) {
     <p>{library.songs.length} / {libraryLimits.songs}曲。選択中: {library.songs.find(song => song.videoId === props.selected)?.title ?? '未選択（手入力）'}</p>
     <ul className="song-list">{library.songs.filter(song => `${song.title} ${song.artist} ${song.videoId}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(song => <li key={song.videoId}>
       <strong>{song.title}</strong> / {song.artist || 'アーティスト未入力'}<br /><small>{song.videoId} · 保存環境: {Object.keys(song.profiles).map(key => environmentLabels[key as Service]).join(' / ') || '未設定'}</small>
-      {song.accompanimentRef && <p className="accompaniment-reference">PC伴奏の記録: {song.accompanimentRef}</p>}
+      {song.accompanimentRef && <details className="accompaniment-reference"><summary>保存済みPC伴奏の記録（参照用）</summary><p>{song.accompanimentRef}</p></details>}
       <div className="actions"><button disabled={busy || reading || !store} aria-pressed={props.selected === song.videoId} onClick={() => { void props.onSelect(song); }}>この曲を選択</button>
       <button disabled={disabled} onClick={() => { setFormNotice(undefined);setDuplicateVideo(undefined);titleAutofill.reset(song.title,true,song.videoId);setEditing(song.videoId); setDraft({ videoId: song.videoId, title: song.title, artist: song.artist, accompanimentRef: song.accompanimentRef ?? '' }); }}>編集</button>
       <button disabled={disabled} onClick={() => {
@@ -84,15 +84,13 @@ export function SongLibraryPanel(props: Props) {
     }}><fieldset disabled={disabled}><legend>{editing ? '曲情報を編集' : '曲を新規登録'}</legend>
       <label>曲名<input required maxLength={200} value={draft.title} onChange={event => titleAutofill.manual(event.target.value)} /></label>
       <label>アーティスト名<input maxLength={200} value={draft.artist} onChange={event => setDraft({ ...draft, artist: event.target.value })} /></label>
-      <VideoReferenceInput value={draft.videoId} onChange={videoId=>{setDraft(previous=>({...previous,videoId}));titleAutofill.referenceChanged(videoId);setFormNotice(undefined);setDuplicateVideo(undefined);}} />
+      <div className="url-registration"><VideoReferenceInput action={<button className="register-song" type="submit">{editing ? '曲情報を更新' : 'この曲を登録'}</button>} value={draft.videoId} onChange={videoId=>{setDraft(previous=>({...previous,videoId}));titleAutofill.referenceChanged(videoId);setFormNotice(undefined);setDuplicateVideo(undefined);}} /></div>
       <p role="status" aria-live="polite">{titleState.message}</p>
       <button type="button" disabled={titleState.status==='loading'} onClick={()=>titleAutofill.retry(draft.videoId,message=>window.confirm(message))}>タイトルを再取得</button>
       <small>新規入力時にYouTubeへ動画IDを送ってタイトルを取得します。曲名の手入力を優先し、取得失敗でも登録できます。</small>
-      <label>PC伴奏のYouTube URLまたはID（任意・記録のみ）<input maxLength={2048} value={draft.accompanimentRef} onChange={event => setDraft({ ...draft, accompanimentRef: event.target.value })} /></label>
-      <p>PCの動画は自分で再生してください。この記録からPCのYouTubeを操作することはありません。</p>
       {formNotice&&<p className="registration-notice" role={formNotice.error?'alert':'status'}>{formNotice.text}</p>}
       {duplicateVideo&&<button type="button" onClick={()=>{void props.onSelect(duplicateVideo);}}>登録済みの「{duplicateVideo.title}」を選択</button>}
-      <div className="actions"><button type="submit">{editing ? '曲情報を更新' : '曲を登録'}</button><button type="button" onClick={() => { setFormNotice(undefined);setDuplicateVideo(undefined);titleAutofill.reset();setEditing(undefined); setDraft({ videoId: props.currentVideoId, title: '', artist: '', accompanimentRef: '' }); }}>新規入力に戻す（現在の動画ID）</button></div>
+      <div className="actions"><button type="button" onClick={() => { setFormNotice(undefined);setDuplicateVideo(undefined);titleAutofill.reset();setEditing(undefined); setDraft({ videoId: props.currentVideoId, title: '', artist: '', accompanimentRef: '' }); }}>新規入力に戻す（現在の動画ID）</button></div>
     </fieldset></form>
     <h3>曲リストのバックアップ・復元</h3>
     <button disabled={!store || busy} onClick={() => {
@@ -100,7 +98,7 @@ export function SongLibraryPanel(props: Props) {
       const url = URL.createObjectURL(new Blob([store.export()], { type: 'application/json' }));
       const link = document.createElement('a'); link.href = url; link.download = `karaokesync-library-${Date.now()}.json`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
     }}>曲リストと保存済み同期設定をJSONで保存</button>
-    <p>画面で変更しただけの未保存設定は含みません。先に「この曲・機種の設定を保存」を押してください。</p>
+    <p>画面で変更しただけの未保存設定は含みません。先に「この設定を保存」を押してください。</p>
     <fieldset disabled={disabled}><legend>復元の準備（まだ保存しません）</legend>
       <label>旧データの機種未選択設定の移行先<select value={legacyService} onChange={event => setLegacyService(event.target.value as Service | '')}><option value="">未指定（機種未選択データは拒否）</option>{environments.map(service => <option value={service} key={service}>{environmentLabels[service]}</option>)}</select></label>
       <label>JSONファイル（React v4 / v3 / v2 / v1 / 旧HTML 0.6）<input type="file" accept=".json,application/json" onChange={event => {
