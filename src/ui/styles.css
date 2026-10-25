@@ -124,3 +124,13 @@ caption { text-align: left; margin-bottom: 8px; }
 .playback-time > span { font-size:.85rem; }
 .playback-time output { font-size:1.4rem; font-weight:700; font-variant-numeric:tabular-nums; }
 .playback-time small { flex-basis:100%; font-size:.75rem; color:#48675e; }
+
+/* Main controls remain side by side on narrow portrait screens. */
+.session-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.session-actions > button { min-width:0; padding-inline:6px; white-space:normal; overflow-wrap:anywhere; min-height:48px; }
+.playback-time output { color:#b42318; font-size:clamp(1.6rem,8vw,2.2rem); font-weight:800; font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; }
+.playback-time { min-width:0; }
+.player-host iframe { aspect-ratio:16 / 9; height:auto; }
+.volume-meter { margin-bottom:8px; }
+.button-link { display:inline-flex; align-items:center; min-height:44px; padding:8px 10px; border:1px solid #78958b; border-radius:7px; color:#173d30; background:#eaf4f0; }
+.browser-help label { margin:8px 0; }

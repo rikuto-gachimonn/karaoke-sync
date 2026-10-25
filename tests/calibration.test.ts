@@ -161,7 +161,7 @@ describe('提案採用と曲・環境別保存',()=>{
   it('採用しない場合は保存を呼ばず、測定中の曲選択・準備をUIで禁止する',async()=>{
     const storage={getItem:vi.fn(()=>null as string|null),setItem:vi.fn()};vi.stubGlobal('localStorage',storage);
     const app=createApp('simulation');await app.calibration.start('noise',context);
-    const html=renderToStaticMarkup(createElement(App,app));expect(html).toMatch(/<button[^>]*disabled=""[^>]*>検知を準備/);expect(html).toContain('測定モード');expect(storage.setItem).not.toHaveBeenCalled();await app.stopAll();
+    const html=renderToStaticMarkup(createElement(App,app));expect(html).toMatch(/<button[^>]*disabled=""[^>]*>検知を開始/);expect(html).toContain('測定モード');expect(storage.setItem).not.toHaveBeenCalled();await app.stopAll();
   });
   it('候補があっても採用操作なしで設定を変更しないと明示する',()=>{
     const s=setup();const adopt=vi.fn();const html=renderToStaticMarkup(createElement(CalibrationPanel,{calibration:s.calibration,context,canAdopt:true,onAdopt:adopt}));

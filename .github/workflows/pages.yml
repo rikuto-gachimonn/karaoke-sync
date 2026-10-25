@@ -59,3 +59,18 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+  report:
+    if: always()
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Report deployment result
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+        run: |
+          echo "Build: $BUILD_RESULT / Deploy: $DEPLOY_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          echo 'If deployment failed, the new version is not confirmed live. Inspect the failed job in Actions and follow docs/safe-automation.md.' >> "$GITHUB_STEP_SUMMARY"
+          test "$BUILD_RESULT" = success && test "$DEPLOY_RESULT" = success

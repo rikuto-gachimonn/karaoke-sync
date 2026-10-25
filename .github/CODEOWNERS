@@ -1,0 +1,6 @@
+# Changes to automation and its trust boundary require owner review.
+/.github/ @rikuto-gachimonn
+/scripts/ @rikuto-gachimonn
+/package.json @rikuto-gachimonn
+/pnpm-lock.yaml @rikuto-gachimonn
+/.node-version @rikuto-gachimonn
