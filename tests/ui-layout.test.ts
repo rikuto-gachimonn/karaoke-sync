@@ -44,7 +44,7 @@ describe('スマートフォン向けメイン画面', () => {
       expect(html).toContain(`id="${id}"`);
       expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toMatch(/\bopen(?:=|\s|>)/);
     }
-    expect(html).toContain('開始位置（秒）'); expect(html).toContain('JSONファイル'); expect(html).toContain('診断JSONを保存');
+    expect(html).toContain('YouTubeの歌い始め位置（秒）'); expect(html).toContain('JSONファイル'); expect(html).toContain('診断JSONを保存');
     expect(html).toContain('次の検知準備・初回検知時に適用');
     expect(html).toContain('aria-label="補正を50ms進める"');
     expect(localStorage.setItem).not.toHaveBeenCalled();

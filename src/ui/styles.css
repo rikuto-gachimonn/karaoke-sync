@@ -150,7 +150,7 @@ caption { text-align: left; margin-bottom: 8px; }
 
 .auto-duration { display:flex; align-items:center; gap:.5rem; flex-basis:100%; }
 .auto-duration input { width:auto; min-height:24px; flex:none; }
-.normal-settings .duration-summary { flex-basis:100%; overflow-wrap:anywhere; }
+
 .live-adjustment .live-coarse { grid-template-columns:repeat(2,minmax(0,1fr)); }
 
 .normal-settings fieldset label.auto-duration, .normal-settings fieldset label.apply-scope { flex-basis:100%; }
@@ -161,3 +161,12 @@ caption { text-align: left; margin-bottom: 8px; }
 
 /* Scroll clearance only; keep the start button away from iPhone browser/header edges. */
 #detection-start { scroll-margin-block: max(80px, env(safe-area-inset-top)) 24px; }
+
+.start-position-summary { flex-basis:100%; min-width:0; padding:10px; border:1px solid #ccd8d3; border-radius:7px; overflow-wrap:anywhere; }
+.start-position-summary dl { margin:0 0 8px; }
+.start-position-summary dt { font-size:.85rem; margin-top:10px; }
+.start-position-summary dd { margin:2px 0 0; }
+.start-position-summary output { font-variant-numeric:tabular-nums; font-weight:700; }
+.start-position-summary .position-explanation { font-size:.8rem; }
+.start-position-summary .start-position-result { font-size:1.25rem; }
+.start-position-breakdown { margin-top:10px; }
