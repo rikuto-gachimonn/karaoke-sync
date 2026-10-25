@@ -16,6 +16,7 @@ import { StartTriggerSettings } from './StartTriggerSettings';
 import { VolumeMeter } from './VolumeMeter';
 import { ManualVideoInput } from './ManualVideoInput';
 import { YouTubeErrorHelp } from './YouTubeErrorHelp';
+import { PlaybackTime } from './PlaybackTime';
 import { CalibrationPanel } from './CalibrationPanel';
 
 export function App({ controller, simulation, mode, setRetainMic, meter, calibration, stopAll }: AppServices) {
@@ -24,12 +25,6 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
   const trialSnapshot=useMemo(()=>controller.exportTrials(),[controller,logVersion]);
   const latency=useMemo(()=>latencySummary(trialSnapshot.trials),[trialSnapshot]);
   const measurement = useSyncExternalStore(calibration.subscribe, calibration.getSnapshot, calibration.getSnapshot);
-  const [currentPosition,setCurrentPosition]=useState<number>();
-  useEffect(()=>{
-    if(state.phase!=='playing'){setCurrentPosition(undefined);return;}
-    const read=()=>{try{setCurrentPosition(controller.playbackPosition());}catch{setCurrentPosition(undefined);}};
-    read();const timer=setInterval(read,500);return ()=>clearInterval(timer);
-  },[controller,state.phase]);
   const [retainMic, setRetain] = useState(true);
   const [saveMessage, setSaveMessage] = useState('');
   const [historyStatus]=useState(()=>{try{return {store:new LiveHistory(localStorage),error:''};}catch(error){return {store:undefined,error:String(error)};}});
@@ -179,6 +174,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       <StartTriggerSettings input={input} disabled={active} onChange={next=>{ if(!active) setInput(next); }} />
       <section className="player-card" aria-label="YouTubeプレイヤー">
         <div id="youtube-host" className="player-host" />
+        <PlaybackTime controller={controller} phase={state.phase} />
         <p className="player-hint">{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
       </section>
     <section className="session-card" aria-labelledby="session-heading"><h2 id="session-heading" className="sr-only">セッション操作</h2>
@@ -230,7 +226,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       </section>}
       {recommendationError&&<p role="alert">推奨値を計算できません: {recommendationError}</p>}
       <section hidden={state.phase!=='playing' && !state.liveAdjustmentMs} className="live-adjustment" aria-label="歌唱中の位置調整">
-        <h2>歌唱中の位置調整</h2><output>現在位置: {currentPosition===undefined?'未確認':currentPosition.toFixed(2)+'秒'}</output>
+        <h2>歌唱中の位置調整</h2>
         <div className="actions">{[-1000,-100,-50,50,100,1000].map(ms=><button key={ms} disabled={state.phase!=='playing'} onClick={()=>controller.adjustLive(ms)}>{ms>0?'＋':'−'}{Math.abs(ms)/1000}秒</button>)}</div>
         <p>今回の移動要求合計: {state.liveAdjustmentMs??0}ms（実移動・発音精度は未保証）</p>
         <button disabled={!recommendation?.remainingMs||switchingSong||measurement.busy||(!state.canPrepare&&state.phase!=='playing')} onClick={adoptResult}>今回の調整を次回用に保存</button>

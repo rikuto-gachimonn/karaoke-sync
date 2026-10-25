@@ -119,3 +119,8 @@ caption { text-align: left; margin-bottom: 8px; }
 .recommendation-card h3 {font-size:1rem;margin:.25rem 0}
 .recommendation-card p {font-size:.9rem;margin:.4rem 0}
 .latency-summary {white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;max-width:100%}
+
+.playback-time { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:8px 10px; }
+.playback-time > span { font-size:.85rem; }
+.playback-time output { font-size:1.4rem; font-weight:700; font-variant-numeric:tabular-nums; }
+.playback-time small { flex-basis:100%; font-size:.75rem; color:#48675e; }
