@@ -158,3 +158,6 @@ caption { text-align: left; margin-bottom: 8px; }
 .url-registration { display:grid; gap:8px; min-width:0; }
 .register-song, .reset-live { min-height:48px; width:100%; }
 .live-adjustment .reset-live { margin-top:16px; min-height:48px; }
+
+/* Scroll clearance only; keep the start button away from iPhone browser/header edges. */
+#detection-start { scroll-margin-block: max(80px, env(safe-area-inset-top)) 24px; }

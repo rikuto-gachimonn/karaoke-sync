@@ -250,7 +250,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       {state.phase==='error'&&<YouTubeErrorHelp message={state.message} videoId={controller.exportTrials().trials.at(-1)?.input.videoId??input.videoId}/>}
       {state.resourceWarning && <p role="alert">{state.resourceWarning}</p>}
       <div className="session-actions">
-        <button className="primary prepare" hidden={playbackControls} disabled={active} onClick={() => { setSaveMessage(''); setRetainMic(retainMic);void controller.prepare(input); }}>検知を開始</button>
+        <button id="detection-start" className="primary prepare" hidden={playbackControls} disabled={active} onClick={() => { setSaveMessage(''); setRetainMic(retainMic);void controller.prepare(input); }}>検知を開始</button>
         <button className="stop" hidden={playbackControls} onClick={() => { void stopAll(); }}>すべてを停止</button>
         {showPlaybackActions && state.phase !== 'paused' && <button disabled={!['waiting', 'starting', 'buffering', 'playing'].includes(state.phase)} onClick={() => { void controller.pause(); }}>一時停止</button>}
         {state.phase === 'paused' && <button disabled={state.phase !== 'paused' || state.message === '一時停止を確認中'} onClick={() => controller.resume()}>再生</button>}

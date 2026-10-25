@@ -5,6 +5,7 @@ import { prepareSongDraft, DuplicateVideoError } from '../library/songDraft';
 import { TitleAutofill } from '../library/titleAutofill';
 import { VideoReferenceInput } from './VideoReferenceInput';
 import { environments, environmentLabels } from '../domain/sync';
+import { createSongSelectionNavigator } from './navigation';
 
 interface Props {
   store?: SongLibrary; library: Library; loadError: string; selected?: string; active: boolean; busy: boolean;
@@ -14,6 +15,10 @@ interface Props {
 }
 export function SongLibraryPanel(props: Props) {
   const { store, library, active, busy } = props;
+  const [selectionCommit, setSelectionCommit] = useState<() => void>();
+  const [selectionNavigation] = useState(() => createSongSelectionNavigator(undefined, undefined, schedule => setSelectionCommit(() => schedule)));
+  useEffect(() => { selectionCommit?.(); }, [selectionCommit]);
+  useEffect(() => () => selectionNavigation.cancel(), [selectionNavigation]);
   const [draft, setDraft] = useState({ videoId: props.currentVideoId, title: '', artist: '', accompanimentRef: '' });
   const [titleAutofill]=useState(()=>new TitleAutofill(title=>setDraft(previous=>({...previous,title}))));
   const titleState=useSyncExternalStore(titleAutofill.subscribe,titleAutofill.getSnapshot,titleAutofill.getSnapshot);
@@ -44,12 +49,7 @@ export function SongLibraryPanel(props: Props) {
       <label>並べ替え<select value={sort} onChange={event=>setSort(event.target.value)}><option value="registered">登録順</option><option value="title">曲名順</option><option value="artist">アーティスト順</option></select></label>
       <ul className="song-list compact-song-list">{matchingSongs.map(song => <li key={song.videoId}>
         <button className="song-choice" disabled={busy || reading || !store} aria-pressed={props.selected === song.videoId} aria-label={`この曲を選択: ${song.title} / ${song.artist}`} onClick={() => {
-          void props.onSelect(song).then(result => {
-            if (result === false) return;
-            const panel = document.getElementById('song-picker') as HTMLDetailsElement | null;
-            if (panel) panel.open = false;
-            const current = document.getElementById('current-song'); current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); current?.focus({ preventScroll: true });
-          });
+          void selectionNavigation.select(() => props.onSelect(song), true);
         }}><strong>{song.title}</strong><small>{song.artist || 'アーティスト未入力'}</small></button>
       </li>)}</ul>
       {!library.songs.length && <p>登録曲がありません。「曲管理」で登録してください。</p>}
@@ -64,7 +64,7 @@ export function SongLibraryPanel(props: Props) {
     <ul className="song-list">{library.songs.filter(song => `${song.title} ${song.artist} ${song.videoId}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(song => <li key={song.videoId}>
       <strong>{song.title}</strong> / {song.artist || 'アーティスト未入力'}<br /><small>{song.videoId} · 保存環境: {Object.keys(song.profiles).map(key => environmentLabels[key as Service]).join(' / ') || '未設定'}</small>
       {song.accompanimentRef && <details className="accompaniment-reference"><summary>保存済みPC伴奏の記録（参照用）</summary><p>{song.accompanimentRef}</p></details>}
-      <div className="actions"><button disabled={busy || reading || !store} aria-pressed={props.selected === song.videoId} onClick={() => { void props.onSelect(song); }}>この曲を選択</button>
+      <div className="actions"><button disabled={busy || reading || !store} aria-pressed={props.selected === song.videoId} onClick={() => { void selectionNavigation.select(() => props.onSelect(song)); }}>この曲を選択</button>
       <button disabled={disabled} onClick={() => { setFormNotice(undefined);setDuplicateVideo(undefined);titleAutofill.reset(song.title,true,song.videoId);setEditing(song.videoId); setDraft({ videoId: song.videoId, title: song.title, artist: song.artist, accompanimentRef: song.accompanimentRef ?? '' }); }}>編集</button>
       <button disabled={disabled} onClick={() => {
         if (!store || !window.confirm(`「${song.title}」とこの曲のDAM/JOYSOUND/自宅テスト設定を削除しますか？ 旧データ・従来の同期設定は削除しません。`)) return;
