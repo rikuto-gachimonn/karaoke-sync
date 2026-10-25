@@ -431,6 +431,13 @@ export class SessionController {
     } catch (error) { if (this.valid(context)) this.update({mic:'releasing',resourceWarning:'マイク解放未完了: '+errorText(error)+'。すべて停止で再試行'}); }
   }
 
+  /** Read-only display access, including paused/preplay positions. Save/adjust guards stay unchanged. */
+  displayPlaybackPosition(): number | undefined {
+    const context = this.current;
+    if (!context || !this.valid(context) || ['stopping', 'error', 'ended'].includes(this.state.phase)) return;
+    const value = context.player.position?.();
+    return value !== undefined && Number.isFinite(value) && value >= 0 ? value : undefined;
+  }
   playbackPosition(): number | undefined {
     const context=this.current;
     if(!context || !this.valid(context) || this.state.phase!=='playing') return;
