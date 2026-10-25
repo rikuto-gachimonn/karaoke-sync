@@ -7,7 +7,6 @@ import { defaultProfile, emptyLibrary, upsertSong, SongLibrary } from '../src/li
 import { parseImport } from '../src/library/backup';
 import { youtubeErrorMessage } from '../src/youtube/errors';
 import { YouTubeErrorHelp } from '../src/ui/YouTubeErrorHelp';
-import { ManualVideoInput } from '../src/ui/ManualVideoInput';
 import { VideoReferenceInput } from '../src/ui/VideoReferenceInput';
 import { App } from '../src/ui/App';
 import { createApp } from '../src/app/createApp';
@@ -75,9 +74,12 @@ it('エラー案内には画面の未確定値ではなく失敗した試行の�
 });
 
 
-it('詳細設定の動画入力は形式を表示し、確定操作なしに動画を変更しない',()=>{
-  const apply=vi.fn();const html=renderToStaticMarkup(createElement(ManualVideoInput,{videoId:id,onApply:apply}));expect(html).toContain('この動画を使用');expect(html).toContain('使用中の動画ID');expect(html).toContain(id);expect(apply).not.toHaveBeenCalled();
+it('共通入力は1つだけで、登録ボタンを入力直後に配置する',()=>{
+  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:vi.fn()});const html=renderToStaticMarkup(createElement(App,createApp('simulation')));
+  expect(html.match(/YouTube URLまたは動画ID<input/g)).toHaveLength(1);
+  expect(html).toMatch(/YouTube URLまたは動画ID<input[^>]*\/><\/label><button[^>]*>この曲を登録<\/button>/);
+  expect(html).not.toContain('この動画を使用');expect(html).not.toContain('PC伴奏のYouTube URL');
 });
-it('詳細設定でも不正な動画入力の確定操作を無効にする',()=>{
-  const apply=vi.fn();const html=renderToStaticMarkup(createElement(ManualVideoInput,{videoId:'invalid',onApply:apply}));expect(html).toMatch(/<button[^>]*disabled=""[^>]*>この動画を使用/);expect(apply).not.toHaveBeenCalled();
+it('共通入力の検証は登録操作で既存のURL検証を使う',()=>{
+  const html=renderToStaticMarkup(createElement(VideoReferenceInput,{value:'https://example.com/not-youtube',onChange:vi.fn()}));expect(html).toContain('aria-invalid="true"');
 });

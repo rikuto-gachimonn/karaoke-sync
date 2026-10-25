@@ -154,3 +154,7 @@ caption { text-align: left; margin-bottom: 8px; }
 .live-adjustment .live-coarse { grid-template-columns:repeat(2,minmax(0,1fr)); }
 
 .normal-settings fieldset label.auto-duration, .normal-settings fieldset label.apply-scope { flex-basis:100%; }
+
+.url-registration { display:grid; gap:8px; min-width:0; }
+.register-song, .reset-live { min-height:48px; width:100%; }
+.live-adjustment .reset-live { margin-top:16px; min-height:48px; }

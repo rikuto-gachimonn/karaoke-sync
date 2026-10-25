@@ -87,6 +87,11 @@ export function adjustEffectiveStart(input: SyncInput, deltaMs: number): SyncInp
   return { ...input, startAdjustmentMs };
 }
 
+/** Reset only the normal-screen primary adjustment. No storage writes or legacy/comparison changes. */
+export function resetStartAdjustment(input: SyncInput): SyncInput {
+  return { ...input, startAdjustmentMs: 0 };
+}
+
 /** 提案の明示採用時のみ呼ぶ。既存の同期位置・比較設定を変更しない。 */
 export function adoptThreshold(input:SyncInput,value:number):SyncInput {
   if(!Number.isFinite(value)||value<0||value>1) throw new Error('しきい値は0〜1です');
