@@ -10,7 +10,7 @@ export function detectionModeFor(input: SyncInput): DetectionMode {
 }
 export function defaultDetectionProfile(videoId: string, service: SyncInput['service'], mode: DetectionMode, runtime: 'real' | 'simulation' = 'real'): ModeProfile {
   return { retainMic: true, input: { videoId, service, startTrigger: mode, savedPositionSec: 0, offsetSec: 0,
-    threshold: settings.normalThreshold, durationMs: settings.normalDurationMs,
+    threshold: settings.normalThreshold, durationMs: settings.normalDurationMs, autoCompensateDetectionDuration: true,
     playbackMode: runtime === 'real' ? 'preplay' : 'legacy', armedTimeoutMs: settings.defaultArmedTimeoutMs,
     compensation: { mode: 'baseline', waitMs: 0, offsetMs: 0 } } };
 }

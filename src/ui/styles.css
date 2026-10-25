@@ -147,3 +147,10 @@ caption { text-align: left; margin-bottom: 8px; }
 .normal-settings .trigger-settings p { font-size:.8rem; }
 .normal-settings small { flex-basis:100%; }
 .session-actions > button[hidden], [hidden] { display:none !important; }
+
+.auto-duration { display:flex; align-items:center; gap:.5rem; flex-basis:100%; }
+.auto-duration input { width:auto; min-height:24px; flex:none; }
+.normal-settings .duration-summary { flex-basis:100%; overflow-wrap:anywhere; }
+.live-adjustment .live-coarse { grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+.normal-settings fieldset label.auto-duration, .normal-settings fieldset label.apply-scope { flex-basis:100%; }

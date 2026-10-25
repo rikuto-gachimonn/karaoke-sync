@@ -268,7 +268,7 @@ export class SessionController {
       this.log.add(context.generation, 'detector.detected');
       this.log.add(context.generation, 'detector.duration.satisfied', `sampleTimeMs=${context.sampleTimeMs ?? 'unknown'}`);
     }
-    if (selectedTrigger(context.input)!=='accompaniment' || context.input.playbackMode === 'preplay' || playbackPlan(context.input).waitMs > 0 || (context.input.startAdjustmentMs ?? 0) !== 0 || (context.input.compensation && context.input.compensation.mode !== 'baseline')) {
+    if (context.input.autoCompensateDetectionDuration === true || selectedTrigger(context.input)!=='accompaniment' || context.input.playbackMode === 'preplay' || playbackPlan(context.input).waitMs > 0 || (context.input.startAdjustmentMs ?? 0) !== 0 || (context.input.compensation && context.input.compensation.mode !== 'baseline')) {
       const compensation = playbackPlan(context.input);
       this.update({ phase: 'waiting', notice: source==='rms'?'音を検知しました。動画を再生します':'手動開始を受け付けました', message: `${source==='manual'?'手動開始受理':'検知成立'}。固定待機${compensation.waitMs}ms（ジッターや実発音の同期を保証しません）` });
       this.log.add(context.generation, 'compensation.wait.start', JSON.stringify(compensation));
@@ -460,7 +460,7 @@ export class SessionController {
   adjustLive(deltaMs:number): void {
     const context=this.current;
     if(!context || !this.valid(context) || this.state.phase!=='playing' || !context.desiredPlayback) return;
-    if(!Number.isSafeInteger(deltaMs) || Math.abs(deltaMs)>1000) return;
+    if(!Number.isSafeInteger(deltaMs) || Math.abs(deltaMs)>5000) return;
     try {
       const current=this.playbackPosition(), duration=context.player.duration?.();
       if(current===undefined || !Number.isFinite(duration) || !duration || duration<=0 || !context.player.seek) throw new Error('現在位置・動画長を確認できません');

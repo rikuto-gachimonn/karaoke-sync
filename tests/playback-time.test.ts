@@ -129,7 +129,7 @@ describe('詳細な再生時刻表示', () => {
     expect(html.indexOf('class="session-card"')).toBeLessThan(html.indexOf('id="youtube-host"'));
     expect(html).toContain('測定精度・実際の発音時刻を保証しません');
     expect(html.match(/今合ってる（現在位置を保存）/g)).toHaveLength(1);
-    expect(html).toContain('音検知設定を全曲に適用');
+    expect(html).toContain('この設定をすべての曲に適用');
     const display = renderToStaticMarkup(createElement(PlaybackTime, { controller: services.controller, phase: 'idle' }));
     expect(display).toContain('--:--.--'); expect(display).toContain('aria-live="off"');
   });

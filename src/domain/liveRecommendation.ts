@@ -1,4 +1,4 @@
-import {adjustEffectiveStart,selectedTrigger,validateInput,type SyncInput} from './sync';
+import {adjustEffectiveStart,playbackPlan,selectedTrigger,validateInput,type SyncInput} from './sync';
 import type {TriggerTrial} from '../diagnostics/trials';
 export interface LiveResult {id:string;input:SyncInput;totalMs:number;retainMic:boolean;operations:number;termination?:string;dismissedTotalMs?:number}
 export const liveHistoryKey='karaokesync.app.live-results.v1';
@@ -14,6 +14,17 @@ export function liveRecommendation(result:LiveResult,current:SyncInput) {
   next.liveApplied=[...(current.liveApplied??[]).filter(item=>item.resultId!==result.id),{resultId:result.id,totalMs:result.totalMs}].slice(-30);
   validateInput(next);
   return {remainingMs,next};
+}
+/** Capture an API position without baking automatic terms or already-used live deltas into the base twice. */
+export function captureStartPosition(input:SyncInput, positionSec:number, result?:LiveResult):SyncInput {
+  if(!Number.isFinite(positionSec)||positionSec<0)throw new Error('現在位置を確認できません');
+  const base=playbackPlan(input).rawMs-(input.startAdjustmentMs??0);
+  const next={...input,startAdjustmentMs:Math.round(positionSec*1000)-base};
+  if(result){
+    if(input.videoId!==result.input.videoId||input.service!==result.input.service||selectedTrigger(input)!==selectedTrigger(result.input))throw new Error('補正結果の曲・環境・モードが一致しません');
+    next.liveApplied=[...(input.liveApplied??[]).filter(item=>item.resultId!==result.id),{resultId:result.id,totalMs:result.totalMs}].slice(-30);
+  }
+  validateInput(next);return next;
 }
 /** 曲設定とは別キー。自動記録は結果だけであり、同期設定を書き換えない。 */
 export class LiveHistory {
