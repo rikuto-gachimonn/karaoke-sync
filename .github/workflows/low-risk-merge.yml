@@ -1,0 +1,76 @@
+name: Approve low-risk CSS PR
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number individually approved for automatic merge'
+        required: true
+        type: string
+      approved_head_sha:
+        description: 'Reviewed full 40-character head SHA (new pushes require new approval)'
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: low-risk-merge-${{ inputs.pr_number }}
+  cancel-in-progress: false
+jobs:
+  merge:
+    environment: low-risk-automerge
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    outputs:
+      merged_sha: ${{ steps.merge.outputs.merged_sha }}
+    steps:
+      # Only trusted main at the dispatch SHA; NEVER PR code. No dependencies installed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .node-version
+      - id: merge
+        run: node --experimental-strip-types scripts/approved-merge.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          APPROVED_HEAD_SHA: ${{ inputs.approved_head_sha }}
+  dispatch-pages:
+    needs: merge
+    if: needs.merge.outputs.merged_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+    steps:
+      # GITHUB_TOKEN merges may not emit push workflows. Explicit dispatch is a supported exception.
+      - name: Dispatch existing main-only Pages workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MERGED_SHA: ${{ needs.merge.outputs.merged_sha }}
+        run: |
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run pages.yml --ref main
+          run_id=''
+          for attempt in $(seq 1 30); do
+            runs=$(gh run list --workflow pages.yml --event workflow_dispatch --branch main --commit "$MERGED_SHA" --limit 20 --json databaseId,createdAt)
+            run_id=$(printf '%s' "$runs" | jq -r --arg started "$started" '[.[] | select(.createdAt >= $started)][0].databaseId // empty')
+            if [ -n "$run_id" ]; then break; fi
+            sleep 2
+          done
+          if [ -z "$run_id" ]; then
+            echo 'Pages run could not be identified; deployment success is unconfirmed. Check Actions.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Pages run: https://github.com/$GH_REPO/actions/runs/$run_id" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" --exit-status --interval 10
+      - name: Pages follow-up
+        if: always()
+        run: echo 'Pages dispatch result is above. Verify the Build and deploy KaraokeSync to GitHub Pages run in Actions. Failed deployment leaves the previous site live; see docs/safe-automation.md for notifications and recovery.' >> "$GITHUB_STEP_SUMMARY"

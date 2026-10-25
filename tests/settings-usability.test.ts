@@ -35,11 +35,11 @@ describe('4段階調整と設定整理', () => {
     expect(restored.input).toEqual(adjusted); expect(restored.retainMic).toBe(false);
     expect(positionComponentsMs(restored.input).effectiveMs).toBe(15300);
   });
-  it('通常設定は常設、実験設定は閉じたパネルに置き全入力をDOMに維持する', () => {
+  it('音声検知は初期展開、実験設定は閉じたパネルに置き全入力をDOMに維持する', () => {
     const st = storage(); vi.stubGlobal('localStorage',st);
     const html = renderToStaticMarkup(createElement(App,createApp('simulation')));
     for(const step of [5000,1000,100,10]) for(const direction of ['進める','戻す']) expect(html).toContain(`開始位置を${step}ms${direction}`);
-    const normal = html.slice(html.indexOf('class="normal-settings"'),html.indexOf('</section>',html.indexOf('class="normal-settings"')));
+    const normal = html.slice(html.indexOf('id="audio-settings"'),html.indexOf('</details>',html.indexOf('id="audio-settings"')));
     expect(normal).toContain('音量しきい値'); expect(normal).toContain('継続時間'); expect(normal).toContain('この曲・機種の設定を保存');
     expect(normal).not.toContain('同期補正方式');
     expect(normal).toContain('音検知設定を全曲に適用');

@@ -16,6 +16,7 @@ import { StartTriggerSettings } from './StartTriggerSettings';
 import { VolumeMeter } from './VolumeMeter';
 import { ManualVideoInput } from './ManualVideoInput';
 import { YouTubeErrorHelp } from './YouTubeErrorHelp';
+import { ChromeOpen } from './ChromeOpen';
 import { PlaybackTime } from './PlaybackTime';
 import { CalibrationPanel } from './CalibrationPanel';
 
@@ -160,6 +161,23 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         <p>{library.songs.find(song => song.videoId === selectedVideoId)?.artist || input.videoId || '曲を選択してください'}</p></div>
         <button aria-controls="song-picker" onClick={() => openPanel('song-picker')}>曲を変更</button>
       </section>
+      <details id="audio-settings" className="normal-settings tool-panel" open><summary>音声検知</summary><div className="panel-body"><fieldset disabled={active}><legend>音検知・設定保存</legend>
+        <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
+        <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
+        <div className="actions"><button onClick={() => saveCurrentSettings()}>この曲・機種の設定を保存</button><button onClick={() => {
+          try {
+            const saved = library.songs.find(song => song.videoId === selectedVideoId)?.profiles[input.service] ?? loadSyncProfile(localStorage, input.videoId, input.service, 3);
+            if (!saved) { setSaveMessage('この動画・機種の保存設定はありません'); return; }
+            setInput(saved.input); setRetain(saved.retainMic); setRetainMic(saved.retainMic); setSaveMessage('設定を復元しました。次の準備から適用します');
+          } catch (error) { setSaveMessage(`復元できません: ${String(error)}`); }
+        }}>この動画・機種の設定を復元</button></div>
+        <button onClick={previewAudioSettings}>音検知設定を全曲に適用</button>
+        <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
+      </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
+        <h2 id="audio-apply-title">音検知設定の一括適用</h2>
+        <p id="audio-apply-description">現在の音量しきい値{audioPlan.values.threshold}、検知継続時間{audioPlan.values.durationMs}msを保存済みの全曲に適用します。既存の音検知設定は上書きされます。よろしいですか？（対象: {audioPlan.songCount}曲・{audioPlan.profileCount}件）</p>
+        <div className="actions"><button autoFocus disabled={applyingAudio} onClick={() => { setAudioPlan(undefined); setSaveMessage('一括適用をキャンセルしました'); }}>キャンセル</button><button disabled={applyingAudio} onClick={() => { void applyAudioSettings(); }}>{applyingAudio ? '適用中…' : '適用'}</button></div>
+      </div>}<p role="status" className="save-status">{saveMessage}</p><button aria-controls="calibration-panel" onClick={()=>openPanel('calibration-panel')}>しきい値を測定・提案</button></div></details>
       <div className="service-picker"><fieldset disabled={active}>
         <label>カラオケ機種・利用環境<select value={input.service} onChange={event => {
           const service = event.target.value as Service;
@@ -172,11 +190,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         }}><option value="DAM">DAM</option><option value="JOYSOUND">JOYSOUND</option><option value="HOME">自宅テスト（PC＋スピーカー）</option></select></label>
       </fieldset></div>
       <StartTriggerSettings input={input} disabled={active} onChange={next=>{ if(!active) setInput(next); }} />
-      <section className="player-card" aria-label="YouTubeプレイヤー">
-        <div id="youtube-host" className="player-host" />
-        <PlaybackTime controller={controller} phase={state.phase} />
-        <p className="player-hint">{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
-      </section>
+      <VolumeMeter meter={meter} threshold={input.threshold} />
     <section className="session-card" aria-labelledby="session-heading"><h2 id="session-heading" className="sr-only">セッション操作</h2>
       <div role="status" aria-live="polite"><strong>{state.phase === 'armed' ? '音検知待機中（'+triggerLabels[selectedTrigger(input)]+'）' : phaseLabels[state.phase]}</strong><p>{state.message}</p><small>セッションのマイク: {state.mic}</small></div>
       {measurement.busy && <p role="status">測定モード: {measurement.message}（すべて停止で中断）</p>}
@@ -184,21 +198,25 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       {state.phase==='error'&&<YouTubeErrorHelp message={state.message} videoId={controller.exportTrials().trials.at(-1)?.input.videoId??input.videoId}/>}
       {state.resourceWarning && <p role="alert">{state.resourceWarning}</p>}
       <div className="session-actions">
-        <button className="primary prepare" disabled={active} onClick={() => { setRetainMic(retainMic);void controller.prepare(input); }}>{selectedTrigger(input)==='manual'?'手動開始を準備':'検知を準備'}</button>
-        <button className="stop" onClick={() => { void stopAll(); }}>すべて停止</button>
+        <button className="primary prepare" disabled={active} onClick={() => { setRetainMic(retainMic);void controller.prepare(input); }}>{selectedTrigger(input)==='manual'?'手動開始を準備':'検知を開始'}</button>
+        <button className="stop" onClick={() => { void stopAll(); }}>すべてを停止</button>
         {state.phase==='micReady' && <button className="primary" onClick={() => controller.retryMicrophone()}>マイクを起動して検知開始</button>}
         {selectedTrigger(input)==='manual' && <button className="primary" disabled={state.phase!=='manualReady'||measurement.busy} onClick={()=>controller.manualStart()}>この位置から開始</button>}
         {state.canRecoverAcquisition && <button onClick={() => { void controller.recoverPendingAcquisition(); }}>未完了の取得を切り離して復旧</button>}
       </div>
       {state.canRecoverAcquisition && <p>この操作はブラウザの取得要求を取り消しません。旧要求の結果は隔離して回収し、新しい準備を可能にします。復旧回数には上限があります。</p>}
     </section>
+      <section className="player-card" aria-label="YouTubeプレイヤー">
+        <div id="youtube-host" className="player-host" />
+        <PlaybackTime controller={controller} phase={state.phase} />
+        <p className="player-hint">{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
+      </section>
       <nav className="tool-links" aria-label="その他の操作">
         <button aria-controls="song-picker" onClick={()=>openPanel('song-picker')}>曲を選ぶ</button>
         <button aria-controls="settings-panel" onClick={() => openPanel('settings-panel')}>詳細設定</button>
         <button aria-controls="song-management" onClick={() => openPanel('song-management')}>曲管理</button>
         <button aria-controls="diagnostics-panel" onClick={() => openPanel('diagnostics-panel')}>診断ログ</button>
       </nav>
-      <VolumeMeter meter={meter} threshold={input.threshold} />
       <details id="correction-panel" className="correction-card" aria-labelledby="correction-heading">
         <summary><h2 id="correction-heading">実効開始位置の調整</h2><output aria-label="実効開始位置" className="effective-position">{effectiveDisplay}</output></summary>
         <div className="panel-body"><small>＋は先へ／−は前へ</small>
@@ -235,26 +253,9 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
         }}>今合ってる（現在位置を保存）</button>
         <small>＋は先へ、−は戻す。seek要求だけを行います。途切れ・再バッファリングは実機で確認してください。</small>
       </section>
-      <section className="normal-settings" aria-label="通常設定"><fieldset disabled={active}><legend>音検知・設定保存</legend>
-        <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
-        <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
-        <div className="actions"><button onClick={() => saveCurrentSettings()}>この曲・機種の設定を保存</button><button onClick={() => {
-          try {
-            const saved = library.songs.find(song => song.videoId === selectedVideoId)?.profiles[input.service] ?? loadSyncProfile(localStorage, input.videoId, input.service, 3);
-            if (!saved) { setSaveMessage('この動画・機種の保存設定はありません'); return; }
-            setInput(saved.input); setRetain(saved.retainMic); setRetainMic(saved.retainMic); setSaveMessage('設定を復元しました。次の準備から適用します');
-          } catch (error) { setSaveMessage(`復元できません: ${String(error)}`); }
-        }}>この動画・機種の設定を復元</button></div>
-        <button onClick={previewAudioSettings}>音検知設定を全曲に適用</button>
-        <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
-      </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
-        <h2 id="audio-apply-title">音検知設定の一括適用</h2>
-        <p id="audio-apply-description">現在の音量しきい値{audioPlan.values.threshold}、検知継続時間{audioPlan.values.durationMs}msを保存済みの全曲に適用します。既存の音検知設定は上書きされます。よろしいですか？（対象: {audioPlan.songCount}曲・{audioPlan.profileCount}件）</p>
-        <div className="actions"><button autoFocus disabled={applyingAudio} onClick={() => { setAudioPlan(undefined); setSaveMessage('一括適用をキャンセルしました'); }}>キャンセル</button><button disabled={applyingAudio} onClick={() => { void applyAudioSettings(); }}>{applyingAudio ? '適用中…' : '適用'}</button></div>
-      </div>}<p role="status" className="save-status">{saveMessage}</p><button aria-controls="calibration-panel" onClick={()=>openPanel('calibration-panel')}>しきい値を測定・提案</button></section>
-
     </div>
     <div className="tools-area">
+      <ChromeOpen />
       <SongLibraryPanel store={libraryStatus.store} library={library} loadError={libraryStatus.error} selected={selectedVideoId}
         active={active} busy={switchingSong || measurement.busy} currentVideoId={input.videoId} initialProfiles={initialProfiles}
         onChanged={libraryChanged} onSelect={chooseSong} onRestored={() => { setSelectedVideoId(undefined); setInput(defaultProfile('', input.service, mode).input); }} />
@@ -278,7 +279,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
 
       </fieldset>
       <p>曲選択・機種変更時は未保存の編集を引き継ぎません。必要な調整は先に保存してください。</p>
-      <p>開始設定は「検知を準備」時に確定し、検知成立時の初回シークに適用します。歌唱中は別枠の位置調整を利用できます。変更・動画切替は「すべて停止」後に行ってください。</p>
+      <p>開始設定は「検知を開始」時に確定し、検知成立時の初回シークに適用します。歌唱中は別枠の位置調整を利用できます。変更・動画切替は「すべて停止」後に行ってください。</p>
       <details><summary>基準位置と適用タイミングの内訳</summary>{(()=>{try{const plan=playbackPlan(input);return <dl><dt>YouTube基準位置（選択トリガー）</dt><dd>{(selectedTrigger(input)==='vocal'?input.vocalPositionSec??input.savedPositionSec:selectedTrigger(input)==='cue'?input.cuePositionSec??input.savedPositionSec:input.savedPositionSec).toFixed(3)}秒</dd><dt>主調整 / 旧オフセット / B</dt><dd>{input.startAdjustmentMs??0}ms / {input.offsetSec}秒 / {compensation.offsetMs}ms（Bは方式に従う）</dd><dt>安定化待機 / 負位置不足 / 比較A待機</dt><dd>{plan.stabilizationMs}ms / {plan.negativeWaitMs}ms / {plan.fixedWaitMs}ms</dd><dt>予定総待機 / 動画開始候補（動画長制限前）</dt><dd>{plan.waitMs}ms / {plan.seekSec.toFixed(3)}秒</dd><dt>直近試行の実適用位置（API要求値）</dt><dd>{(()=>{const trial=trialSnapshot.trials.at(-1);return trial?.input.videoId===input.videoId&&trial.environment===input.service&&selectedTrigger(trial.input)===selectedTrigger(input)&&trial.seekSec!==undefined?trial.seekSec.toFixed(3)+'秒（実発音未確認）':'未記録';})()}</dd></dl>;}catch{return <p>入力値を確認してください</p>;}})()}</details>
       <p>正の補正は動画の先の位置から開始します。操作刻みは実際の同期精度を保証しません。</p>
     </div></details>
@@ -345,7 +346,7 @@ export function App({ controller, simulation, mode, setRetainMic, meter, calibra
       <div className="logs"><table><caption>直近100件（JSON出力には保持中の全件）</caption><thead><tr><th>時刻</th><th>世代</th><th>イベント</th><th>詳細</th></tr></thead><tbody>{logs.slice(-100).map(entry => <tr key={entry.sequence}><td>{entry.timeMs.toFixed(1)}</td><td>{entry.generation}</td><td>{entry.event}</td><td>{entry.detail}</td></tr>)}</tbody></table></div>
     </div></details>
       <details className="tool-panel"><summary>使い方・音声出力について</summary><div className="panel-body">
-        <p>事前再生方式は「検知を準備」→YouTube内を直接タップ→自動一時停止→マイク許可→音検知で自動再開です。待機中の無音を確認してください。</p>
+        <p>事前再生方式は「検知を開始」→YouTube内を直接タップ→自動一時停止→マイク許可→音検知で自動再開です。待機中の無音を確認してください。</p>
         <p>PLAYINGはAPI上の確認で実発音ではありません。Bluetooth出力先はWebから完全制御できません。無音・音質低下時は停止し、端末の出力先とマイク保持／解放設定を確認してください。</p>
         <p>固定待機でジッターは消えません。操作刻みは同期精度を保証しません。曲・機種変更時に未保存の調整は引き継ぎません。</p>
         {!active && <p><a href={mode === 'real' ? `${import.meta.env.BASE_URL}?mode=simulation` : import.meta.env.BASE_URL}>{mode === 'real' ? '模擬モードへ切替' : '実接続モードへ切替'}</a>（画面設定とログはリセット）</p>}
