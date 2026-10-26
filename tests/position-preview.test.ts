@@ -77,5 +77,16 @@ describe('確認音だけの試聴', () => {
  });
  it('通常セッション中には鳴らない',async()=>{const s=setup(false);await s.preview.testTone();expect(s.audio).not.toHaveBeenCalled();});
  it('すべて停止と非表示で音声処理を解放する',async()=>{const s=setup();await s.preview.testTone();s.hide();await flush();expect(s.tone.close).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);});
- it.each([[0,0],[60,.09],[100,.15],[200,.15],[-1,0]])('音量%s%%をゲイン%sに制限する',async(percent,peak)=>{browser();const tone=new BrowserPreviewTone(percent);await tone.unlock();tone.beep();expect(FakeContext.instances[0]!.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(peak,10.01);await tone.close();});
+ it.each([[0,0],[30,.09],[60,.18],[100,.30],[200,.30],[-1,0]])('音量%s%%をゲイン%sに制限する',async(percent,peak)=>{browser();const tone=new BrowserPreviewTone(percent);await tone.unlock();tone.beep();expect(FakeContext.instances[0]!.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(peak,10.01);await tone.close();});
+});
+describe('保存済み音量のゲイン互換性',()=>{
+ it.each([[0,0],[5,.0075],[60,.09],[100,.15]])('旧スケール%s%%で従来ゲイン%sを維持',async(percent,peak)=>{
+  browser();const tone=new BrowserPreviewTone(percent,1);await tone.unlock();tone.beep();expect(FakeContext.instances[0]!.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(peak,10.01);await tone.close();
+ });
+ it('アプリから新上限100%を試聴し、周波数・時間・フェード・回収を維持',async()=>{
+  browser();const app=createApp('simulation');app.setPreviewVolume(100,2);await app.preview.testTone();const context=FakeContext.instances[0]!;
+  expect(context.oscillator.frequency.value).toBe(880);expect(context.oscillator.stop).toHaveBeenCalledWith(10.16);
+  expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(.30,10.01);expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0,10.15);
+  await vi.advanceTimersByTimeAsync(200);expect(context.state).toBe('closed');
+ });
 });
