@@ -11,7 +11,7 @@ export function CalibrationPanel({calibration,context,canAdopt,onAdopt,blocked=f
   const matches=state.context===context;
   return <details id="calibration-panel" className="tool-panel"><summary>雑音・伴奏の測定としきい値の提案</summary><div className="panel-body">
     <p>測定モードでは通常の再生・音検知を停止します。YouTubeの自動再生はしません。画面を表示したまま測定してください。</p>
-    <p>① 伴奏を止め、静かにして雑音を4秒測定 → ② PCまたはカラオケ機器で曲の冒頭の小さい音を流し、伴奏を4秒測定。</p>
+    <p data-help>① 伴奏を止め、静かにして雑音を4秒測定 → ② PCまたはカラオケ機器で曲の冒頭の小さい音を流し、伴奏を4秒測定。</p>
     <div className="actions">
       <button disabled={state.busy || blocked} onClick={()=>{void calibration.start('noise',context);}}>雑音を4秒測定（伴奏を止める）</button>
       <button disabled={state.busy || blocked} onClick={()=>{void calibration.start('music',context);}}>伴奏を4秒測定</button>

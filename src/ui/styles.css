@@ -185,3 +185,12 @@ caption { text-align: left; margin-bottom: 8px; }
 .live-primary-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:8px 0; }
 .live-primary-actions button { min-height:48px; padding:8px; font-size:.85rem; }
 #live-fine-controls > summary { min-height:44px; padding:8px 0; }
+
+/* Only explicitly identified supplemental prose is optional. */
+.karaoke-app[data-show-help="false"] [data-help] { display: none !important; }
+.tone-volume { display: grid; gap: .6rem; margin-block: .8rem; min-width: 0; }
+.tone-volume-row { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.tone-volume-row input { flex: 1; min-width: 0; width: 100%; min-height: 44px; }
+.tone-volume-row output { min-width: 4ch; font-variant-numeric: tabular-nums; }
+.display-preferences { display: flex; align-items: center; justify-content: center; gap: .6rem; margin-block: 1.5rem; font-size: .9rem; }
+.display-preferences label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }

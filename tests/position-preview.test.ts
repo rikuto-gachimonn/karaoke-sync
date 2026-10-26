@@ -57,7 +57,7 @@ class FakeContext {
 }
 function browser(){FakeContext.instances=[];vi.stubGlobal('window',{AudioContext:FakeContext});vi.stubGlobal('document',{hidden:false,addEventListener:vi.fn(),removeEventListener:vi.fn()});}
 describe('短いWeb Audio確認音とアプリ資源の排他',()=>{
- it('880Hz/低ゲイン/160ms以内を1回、終了後にノードとContextを解放',async()=>{browser();const tone=new BrowserPreviewTone();const pending=tone.unlock();expect(FakeContext.instances).toHaveLength(1);await pending;const context=FakeContext.instances[0]!;tone.beep();tone.beep();expect(context.oscillator.frequency.value).toBe(880);expect(context.oscillator.start).toHaveBeenCalledTimes(1);expect(context.oscillator.stop).toHaveBeenCalledWith(10.16);expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(.06,10.01);await tone.close();expect(context.oscillator.disconnect).toHaveBeenCalled();expect(context.close).toHaveBeenCalledTimes(1);});
+ it('880Hz/低ゲイン/160ms以内を1回、終了後にノードとContextを解放',async()=>{browser();const tone=new BrowserPreviewTone();const pending=tone.unlock();expect(FakeContext.instances).toHaveLength(1);await pending;const context=FakeContext.instances[0]!;tone.beep();tone.beep();expect(context.oscillator.frequency.value).toBe(880);expect(context.oscillator.start).toHaveBeenCalledTimes(1);expect(context.oscillator.stop).toHaveBeenCalledWith(10.16);expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(.09,10.01);await tone.close();expect(context.oscillator.disconnect).toHaveBeenCalled();expect(context.close).toHaveBeenCalledTimes(1);});
  it('発音ノードが既に終了していてもContextのcloseを省略しない',async()=>{browser();const tone=new BrowserPreviewTone();await tone.unlock();tone.beep();FakeContext.instances[0]!.oscillator.stop.mockImplementationOnce(()=>{throw Error('already stopped');});await tone.close();expect(FakeContext.instances[0]!.state).toBe('closed');});
  it('Web Audio起動の拒否を日本語で案内し、音を生成しない',async()=>{browser();const tone=new BrowserPreviewTone();await tone.unlock();FakeContext.instances[0]!.resume.mockRejectedValueOnce(Error('blocked'));await expect(tone.unlock()).rejects.toThrow('起動が制限');expect(FakeContext.instances[0]!.oscillator.start).not.toHaveBeenCalled();await tone.close();});
  it('停止中のAudioContextでは音を要求しない',async()=>{browser();const tone=new BrowserPreviewTone();await tone.unlock();FakeContext.instances[0]!.state='suspended';expect(()=>tone.beep()).toThrow();expect(FakeContext.instances[0]!.oscillator.start).not.toHaveBeenCalled();await tone.close();});
@@ -66,4 +66,16 @@ describe('短いWeb Audio確認音とアプリ資源の排他',()=>{
  it('プレビュー中の測定ボタンもUIで無効にする',()=>{vi.stubGlobal('localStorage',{getItem:()=>null,setItem:vi.fn()});const app=createApp('simulation');vi.spyOn(app.preview,'getSnapshot').mockReturnValue({busy:true,phase:'playing',message:'preview',beeped:false,targetSec:30});const html=renderToStaticMarkup(createElement(App,app));expect(html).toMatch(/<button disabled="">雑音を4秒測定/);expect(html).toMatch(/<button disabled="">伴奏を4秒測定/);});
 
  it('開始位置入力・候補・プレビュー・保存を同じパネルに置き入力を重複させない',()=>{vi.stubGlobal('localStorage',{getItem:()=>null,setItem:vi.fn()});const html=renderToStaticMarkup(createElement(App,createApp('simulation')));const correction=html.slice(html.indexOf('id="correction-panel"'),html.indexOf('id="advanced-settings"'));expect(html.match(/YouTubeの歌い始め位置（秒）<input/g)).toHaveLength(1);for(const label of ['YouTubeの歌い始め位置','検知継続時間による自動補正','補正後の再生開始位置','ピー音で開始位置を確認','この開始位置設定を保存','補正を0秒に戻す'])expect(correction).toContain(label);const audio=html.slice(html.indexOf('id="audio-settings"'),html.indexOf('class="service-picker"'));expect(audio).not.toContain('YouTubeの歌い始め位置');expect(localStorage.setItem).not.toHaveBeenCalled();});
+});
+
+describe('確認音だけの試聴', () => {
+ it('動画を生成せず1回鳴らし、連打とプレビューを排他にして終了する', async () => {
+  const s=setup(); const first=s.preview.testTone(); const repeated=s.preview.testTone(); await first; await repeated;
+  await s.preview.start(id,30);
+  expect(s.factory).not.toHaveBeenCalled(); expect(s.audio).toHaveBeenCalledTimes(1); expect(s.tone.beep).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(200); expect(s.tone.close).toHaveBeenCalledTimes(1); expect(s.preview.getSnapshot().busy).toBe(false); expect(vi.getTimerCount()).toBe(0);
+ });
+ it('通常セッション中には鳴らない',async()=>{const s=setup(false);await s.preview.testTone();expect(s.audio).not.toHaveBeenCalled();});
+ it('すべて停止と非表示で音声処理を解放する',async()=>{const s=setup();await s.preview.testTone();s.hide();await flush();expect(s.tone.close).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);});
+ it.each([[0,0],[60,.09],[100,.15],[200,.15],[-1,0]])('音量%s%%をゲイン%sに制限する',async(percent,peak)=>{browser();const tone=new BrowserPreviewTone(percent);await tone.unlock();tone.beep();expect(FakeContext.instances[0]!.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(peak,10.01);await tone.close();});
 });
