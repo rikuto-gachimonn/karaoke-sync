@@ -5,7 +5,7 @@ export class BrowserPreviewTone implements PreviewTone {
   private oscillator?: OscillatorNode;
   private gain?: GainNode;
   private sounded = false;
-  constructor(private volumePercent = 30, private volumeScale: 1 | 2 = 2) {}
+  constructor(private volumePercent = 20) {}
   async unlock() {
     if (!this.context) {
       const Constructor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -23,7 +23,7 @@ export class BrowserPreviewTone implements PreviewTone {
     this.sounded = true;
     const oscillator = context.createOscillator(), gain = context.createGain(), time = context.currentTime;
     this.oscillator = oscillator; this.gain = gain;
-    const peak = (this.volumeScale === 1 ? .15 : .30) * (Number.isFinite(this.volumePercent) ? Math.min(100, Math.max(0, this.volumePercent)) : 30) / 100;
+    const peak = .60 * (Number.isFinite(this.volumePercent) ? Math.min(100, Math.max(0, this.volumePercent)) : 20) / 100;
     oscillator.type = 'sine'; oscillator.frequency.value = 880;
     gain.gain.setValueAtTime(0, time); gain.gain.linearRampToValueAtTime(peak, time + .01);
     gain.gain.setValueAtTime(peak, time + .10); gain.gain.linearRampToValueAtTime(0, time + .15);

@@ -1,4 +1,4 @@
-import { defaultDisplayPreferences, readDisplayPreferences, writeDisplayPreferences, type DisplayPreferences } from '../app/displayPreferences';
+import { defaultDisplayPreferences, loadDisplayPreferences, writeDisplayPreferences, type DisplayPreferences } from '../app/displayPreferences';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppServices } from '../app/createApp';
 import { LiveHistory, liveRecommendation, captureStartPosition } from '../domain/liveRecommendation';
@@ -26,12 +26,12 @@ import { PlaybackTime } from './PlaybackTime';
 import { CalibrationPanel } from './CalibrationPanel';
 
 export function App({ controller, preview, simulation, mode, setRetainMic, meter, calibration, stopAll, setPreviewVolume }: AppServices) {
-  const [displayInitial] = useState(() => { try { return { value: readDisplayPreferences(localStorage), error: '' }; } catch (error) { return { value: { ...defaultDisplayPreferences }, error: String(error) }; } });
+  const [displayInitial] = useState(() => { try { return loadDisplayPreferences(localStorage); } catch (error) { return { value: { ...defaultDisplayPreferences }, error: String(error) }; } });
   const [display, setDisplay] = useState(displayInitial.value);
   const [displayError, setDisplayError] = useState(displayInitial.error);
-  useEffect(() => { setPreviewVolume(display.volumePercent, display.volumeScale); }, [display.volumePercent, display.volumeScale, setPreviewVolume]);
+  useEffect(() => { setPreviewVolume(display.volumePercent); }, [display.volumePercent, setPreviewVolume]);
   function changeDisplay(next: DisplayPreferences) {
-    setDisplay(next); setPreviewVolume(next.volumePercent, next.volumeScale);
+    setDisplay(next); setPreviewVolume(next.volumePercent);
     try { writeDisplayPreferences(localStorage, next); setDisplayError(''); }
     catch (error) { setDisplayError(`表示・確認音設定を保存できません。今回の画面には反映済みです: ${String(error)}`); }
   }
@@ -329,9 +329,9 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <SingingPositionInput input={input} disabled={active} onChange={next => { if (!active) setInput(next); }} />
         <div className="tone-volume">
           <label htmlFor="preview-volume">確認音の音量</label>
-          <div className="tone-volume-row"><span>小</span><input id="preview-volume" type="range" min="0" max="100" step="5" value={display.volumePercent} disabled={previewState.busy} onChange={event => changeDisplay({ ...display, volumePercent: Number(event.target.value) })} /><span>大</span><output htmlFor="preview-volume">{display.volumePercent}%</output></div>
+          <div className="tone-volume-row"><span>小</span><input id="preview-volume" type="range" min="0" max="100" step="5" aria-valuetext={`${display.volumePercent}%`} value={display.volumePercent} disabled={previewState.busy} onChange={event => changeDisplay({ ...display, volumePercent: Number(event.target.value) })} /><span>大</span><output htmlFor="preview-volume">{display.volumePercent}%</output></div>
+          <small data-help>旧設定は従来のゲインを保つ百分率へ換算します。移行値は小数になる場合があります。スライダーの操作は5%刻みです。</small>
           <small>アプリ内の相対音量です。端末音量・実際の音圧は保証しません。小さい音量から確認してください。</small>
-          {display.volumeScale === 1 && <div className="legacy-tone-volume"><p>以前の音量上限を使用中です。保存済みの％と音量を維持しています。新しい上限では同じ％でゲインが2倍になります。端末音量を下げ、小さい％から確認してください。</p><button disabled={active} onClick={() => changeDisplay({ ...display, volumeScale: 2 })}>新しい音量上限を使う</button></div>}
           <button disabled={active} onClick={() => { void preview.testTone(); }}>確認音を試す</button>
         </div>
         <div className="preview-controls">
