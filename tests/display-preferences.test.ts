@@ -21,3 +21,14 @@ it('説明OFFでも入力・操作・候補・警告を補足説明の外に保�
   expect(setItem).not.toHaveBeenCalled();
  } finally {vi.unstubAllGlobals();}
 });
+it.each([false,true])('説明切り替えは名前・状態を持つ1つのスイッチで表示する: %s',showHelp=>{
+ vi.stubGlobal('localStorage',{getItem:(key:string)=>key===displayPreferencesKey?JSON.stringify({volumePercent:60,showHelp}):null,setItem:vi.fn()});
+ try {
+  const html=renderToStaticMarkup(createElement(App,createApp('simulation')));
+  const control=html.slice(html.indexOf('<div class="display-preferences">'));
+  expect(control.match(/role="switch"/g)).toHaveLength(1);
+  expect(control).toMatch(/<label><span[^>]*>詳しい説明を表示<\/span>.*<input[^>]*role="switch"/);
+  expect(control).toContain(`<span aria-hidden="true">${showHelp?'ON':'OFF'}</span>`);
+  expect(control.includes('checked=""')).toBe(showHelp);
+ } finally {vi.unstubAllGlobals();}
+});
