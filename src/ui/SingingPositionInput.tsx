@@ -16,6 +16,6 @@ export function SingingPositionInput({input, disabled, onChange}:{input:SyncInpu
       const value = event.target.value === '' ? NaN : event.target.valueAsNumber;
       onChange({ ...input, [selected === 'vocal' ? 'vocalPositionSec' : 'savedPositionSec']: value });
     }} /></label>
-    <small>YouTube動画で実際に歌い始める時刻を入力してください。自動補正はこの入力値を書き換えません。</small>
+    <small data-help>YouTube動画で実際に歌い始める時刻を入力してください。自動補正はこの入力値を書き換えません。</small>
   </fieldset>;
 }

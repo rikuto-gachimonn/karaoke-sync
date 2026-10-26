@@ -1,3 +1,4 @@
+import { defaultDisplayPreferences, readDisplayPreferences, writeDisplayPreferences, type DisplayPreferences } from '../app/displayPreferences';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppServices } from '../app/createApp';
 import { LiveHistory, liveRecommendation, captureStartPosition } from '../domain/liveRecommendation';
@@ -24,7 +25,16 @@ import { ChromeOpen } from './ChromeOpen';
 import { PlaybackTime } from './PlaybackTime';
 import { CalibrationPanel } from './CalibrationPanel';
 
-export function App({ controller, preview, simulation, mode, setRetainMic, meter, calibration, stopAll }: AppServices) {
+export function App({ controller, preview, simulation, mode, setRetainMic, meter, calibration, stopAll, setPreviewVolume }: AppServices) {
+  const [displayInitial] = useState(() => { try { return { value: readDisplayPreferences(localStorage), error: '' }; } catch (error) { return { value: { ...defaultDisplayPreferences }, error: String(error) }; } });
+  const [display, setDisplay] = useState(displayInitial.value);
+  const [displayError, setDisplayError] = useState(displayInitial.error);
+  useEffect(() => { setPreviewVolume(display.volumePercent); }, [display.volumePercent, setPreviewVolume]);
+  function changeDisplay(next: DisplayPreferences) {
+    setDisplay(next); setPreviewVolume(next.volumePercent);
+    try { writeDisplayPreferences(localStorage, next); setDisplayError(''); }
+    catch (error) { setDisplayError(`表示・確認音設定を保存できません。今回の画面には反映済みです: ${String(error)}`); }
+  }
   const previewState = useSyncExternalStore(preview.subscribe, preview.getSnapshot, preview.getSnapshot);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const logVersion=useSyncExternalStore(controller.log.subscribe, controller.log.getVersion, controller.log.getVersion);
@@ -220,7 +230,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       if(saveCurrentSettings(recommendation.next,savedRetain)){setInput(recommendation.next);setRetain(savedRetain);setRetainMic(savedRetain);controller.log.add(state.generation,'recommendation.applied',JSON.stringify({resultId:result.id,deltaMs:recommendation.remainingMs}));setSaveMessage('推奨値を採用・保存しました。基準位置は維持し、次回準備から反映します');}
     }catch(error){setSaveMessage(String(error));}
   }
-  return <main className="karaoke-app">
+  return <main className="karaoke-app" data-show-help={display.showHelp}>
     <header className="app-header"><h1>SyncLab</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
     <p className="session-notice" role="status" aria-live="polite">{state.notice}</p>
     <div className="performance-area">
@@ -234,7 +244,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <label>音量しきい値<input type="number" min="0" max="1" step="0.005" value={Number.isNaN(input.threshold) ? '' : input.threshold} onChange={event => numeric('threshold', event.target.value)} /></label>
         <label>継続時間（ms）<input type="number" min="0" max={settings.maxDurationMs} step="10" value={Number.isNaN(input.durationMs) ? '' : input.durationMs} onChange={event => numeric('durationMs', event.target.value)} /></label>
         <label className="auto-duration"><input type="checkbox" checked={input.autoCompensateDetectionDuration === true} onChange={event => setInput({...input, autoCompensateDetectionDuration:event.target.checked})} />検知継続時間の自動補正</label>
-        <small>新規設定はON。以前の保存設定はOFFとして読み込み、明示的にONにした場合だけ加算します。APIやBluetoothの再生遅延・実際の検知所要時間を測定する補正ではありません。</small>
+        <small data-help>新規設定はON。以前の保存設定はOFFとして読み込み、明示的にONにした場合だけ加算します。</small><small>APIやBluetoothの再生遅延・実際の検知所要時間を測定する補正ではありません。</small>
         <div className="actions"><button onClick={() => saveCurrentSettings()}>この設定を保存</button><button onClick={() => {
           try {
             const saved = savedMode();
@@ -243,7 +253,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
           } catch (error) { setSaveMessage(`復元できません: ${String(error)}`); }
         }}>この動画・機種の設定を復元</button></div>
         <button onClick={previewAudioSettings}>この音検知設定をすべての曲に適用</button>
-        <small>一括適用は音量しきい値・検知継続時間だけです。曲ごとの歌い始め位置、補正値、自動補正ON/OFFなどは変更しません。</small>
+        <small data-help>一括適用は音量しきい値・検知継続時間だけです。曲ごとの歌い始め位置、補正値、自動補正ON/OFFなどは変更しません。</small>
         <small>保存・一括適用の対象: {detectionModeLabels[detectionMode]}。他のモードは変更しません。</small>
         <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
       </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
@@ -301,10 +311,10 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <div className="actions live-fine">{[-1000,-100,-50,50,100,1000].map(ms=><button key={ms} disabled={state.phase!=='playing'} onClick={()=>controller.adjustLive(ms)}>{ms>0?'＋':'−'}{Math.abs(ms)/1000}秒</button>)}</div>
         <div className="actions live-coarse" aria-label="5秒単位の調整">{[-5000,5000].map(ms=><button key={ms} disabled={state.phase!=='playing'} onClick={()=>controller.adjustLive(ms)}>{ms>0?'＋':'−'}5秒</button>)}</div>
         <button className="reset-live" disabled={state.phase !== 'playing' || !state.liveAdjustmentMs} onClick={() => controller.resetLiveAdjustment()}>今回の補正を0秒に戻す</button>
-        <small>現在位置から今回の補正合計を逆向きに取り消します。動画端では取り消せた要求量だけ合計から引き、保存済み設定は変更しません。</small>
+        <small data-help>現在位置から今回の補正合計を逆向きに取り消します。動画端では取り消せた要求量だけ合計から引き、保存済み設定は変更しません。</small>
         <p>今回の移動要求合計: {state.liveAdjustmentMs??0}ms（実移動・発音精度は未保証）</p>
 
-        <small>＋は先へ、−は戻す。seek要求だけを行います。途切れ・再バッファリングは実機で確認してください。</small>
+        <small data-help>＋は先へ、−は戻す。seek要求だけを行います。</small><small>途切れ・再バッファリングは実機で確認してください。</small>
         </details>
       </section>
       <nav className="tool-links" aria-label="その他の操作">
@@ -317,6 +327,12 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <summary><h2 id="correction-heading">実効開始位置の調整</h2><output aria-label="実効開始位置" className="effective-position">{effectiveDisplay}</output></summary>
         <div className="panel-body">
         <SingingPositionInput input={input} disabled={active} onChange={next => { if (!active) setInput(next); }} />
+        <div className="tone-volume">
+          <label htmlFor="preview-volume">確認音の音量</label>
+          <div className="tone-volume-row"><span>小</span><input id="preview-volume" type="range" min="0" max="100" step="5" value={display.volumePercent} disabled={previewState.busy} onChange={event => changeDisplay({ ...display, volumePercent: Number(event.target.value) })} /><span>大</span><output htmlFor="preview-volume">{display.volumePercent}%</output></div>
+          <small>アプリ内の相対音量です。端末音量・実際の音圧は保証しません。小さい音量から確認してください。</small>
+          <button disabled={active} onClick={() => { void preview.testTone(); }}>確認音を試す</button>
+        </div>
         <div className="preview-controls">
           <button disabled={active || !Number.isFinite(triggerPosition(input)) || triggerPosition(input) < 0} onClick={() => { void preview.start(input.videoId, triggerPosition(input)); }}>ピー音で開始位置を確認</button>
           {previewState.phase === 'ready' && <button onClick={() => preview.play()}>プレビューを再生</button>}
@@ -324,9 +340,9 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         </div>
         {previewState.message && <p role="status" className="preview-status">{!previewState.busy && '直近の確認結果：'}{previewState.message}</p>}
         {previewState.positionSec !== undefined && <output className="preview-position" aria-label="プレビューの直近取得位置" aria-live="off">動画位置 {previewState.positionSec.toFixed(2)}秒 / 確認対象 {previewState.targetSec?.toFixed(2)}秒（参考値）</output>}
-        <small>補正前の歌い始め位置の2秒前から約2秒後まで確認します。動画の時刻通過を見て短い確認音を1回鳴らすため、音との一致精度・Bluetoothの同一出力先は保証できません。マイクや通常の検知は起動しません。</small>
+        <small data-help>補正前の歌い始め位置の2秒前から約2秒後まで確認します。動画の時刻通過を見て短い確認音を1回鳴らします。マイクや通常の検知は起動しません。</small><small>確認音と動画音声の一致精度・Bluetoothの同一出力先は保証できません。</small>
         <StartPositionSummary input={input} />
-        <small>＋は先へ／−は前へ</small>
+        <small data-help>＋は先へ／−は前へ</small>
         <fieldset disabled={active} className="correction-controls">
           {([5000, 1000, 100, 50, 10] as const).map(step => <div className="position-step" key={step}>
             <button aria-label={`開始位置を${step}ms戻す`} onClick={() => stepEffective(-step)}>−{step / 1000}秒</button>
@@ -337,8 +353,8 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <button disabled={active || !input.startAdjustmentMs} onClick={() => { setInput(resetStartAdjustment(input)); setSaveMessage('主調整を0秒に戻しました。未保存です。「この設定を保存」で保存します。旧オフセット・比較補正は変更していません'); }}>補正を0秒に戻す</button>
         <button disabled={active} onClick={() => saveCurrentSettings()}>この開始位置設定を保存</button>
         <p role="status" className="save-status">{saveMessage}</p>
-        <small>この操作は主調整だけを0にします。基準位置・旧オフセット・比較補正・検知時間の自動補正は維持します。</small>
-        <p>停止後に調整 → 次の検知準備・初回検知時に適用。基準モードでも有効。</p>
+        <small data-help>この操作は主調整だけを0にします。基準位置・旧オフセット・比較補正・検知時間の自動補正は維持します。</small>
+        <p data-help>停止後に調整 → 次の検知準備・初回検知時に適用。基準モードでも有効。</p>
         <small>主調整: {input.startAdjustmentMs ?? 0}ms。10ms刻みは同期精度の保証ではありません。</small>
         <p>表示は動画長制限前。負の位置は不足分だけ検知後に待機して0秒から再生。A固定待機とは加算し、動画長の上限は再生要求時に制限します。</p>
         </div>
@@ -393,7 +409,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <label>B 追加位置補正（ms、BまたはA＋B時のみ）<input type="number" min="-86400000" max="86400000" step="1" value={Number.isNaN(compensation.offsetMs) ? '' : compensation.offsetMs} onChange={event => changeCompensation({ offsetMs: event.target.valueAsNumber })} /></label>
         <div className="actions"><button aria-label="補正を50ms戻す" onClick={() => stepCompensation(-1)}>比較B −50ms</button><button aria-label="補正を50ms進める" onClick={() => stepCompensation(1)}>比較B ＋50ms</button></div>
         <p>過去データの位置計算を維持する設定です。通常の調整はメイン画面だけで行ってください。同じ補正をここにも重ねて入力しないでください。</p>
-        <p>計算結果は実効開始位置の調整欄の「補正後の再生開始位置」を確認してください。旧オフセットと有効Bも、既存の計算で一度だけ加算します。</p>
+        <p data-help>計算結果は実効開始位置の調整欄の「補正後の再生開始位置」を確認してください。旧オフセットと有効Bも、既存の計算で一度だけ加算します。</p>
         </div></details>
         <label>検知待機期限（秒、継続時間とは別）<input type="number" min="1" max={settings.maxArmedTimeoutMs / 1000} value={(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000} onChange={event => setInput({ ...input, armedTimeoutMs: event.target.valueAsNumber * 1000 })} /></label>
         <label>検知後のマイク資源<select value={retainMic ? 'retain' : 'release'} onChange={event => { const value = event.target.value === 'retain'; setRetain(value); setRetainMic(value); }}><option value="retain">保持（新規設定で推奨・検知は終了）</option><option value="release">解放（比較用）</option></select></label>
@@ -403,7 +419,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       <p>保持は今回の実機結果に基づく推奨初期値です。すべてのiPhone・イヤホンに最適とは限りません。保持でも停止・期限切れ時には解放します。</p>
     </div></details>
     {mode === 'simulation' && <details className="tool-panel"><summary>模擬イベント操作</summary><div className="panel-body">
-      <p>「模擬音を入力」→「模擬PLAYING」で検知成立と再生確認を別々に試せます。無音・停止・エラーも確認できます。</p>
+      <p data-help>「模擬音を入力」→「模擬PLAYING」で検知成立と再生確認を別々に試せます。無音・停止・エラーも確認できます。</p>
       <div className="actions">
         <button disabled={state.phase !== 'armed'} onClick={() => simulation.tone()}>模擬持続音（最大2.2秒）</button>
         <button disabled={state.phase !== 'armed'} onClick={() => simulation.sample({ rms: 0.5, timeMs: performance.now() })}>模擬音を入力（1観測）</button>
@@ -445,6 +461,8 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       </div></details>
     </div></details>
     </div>
+    <div className="display-preferences"><label><input type="checkbox" checked={display.showHelp} onChange={event => changeDisplay({ ...display, showHelp: event.target.checked })} />詳しい説明を表示</label><span>{display.showHelp ? 'ON' : 'OFF'}</span></div>
+    {displayError && <p role="alert">{displayError}</p>}
   </main>;
 }
 

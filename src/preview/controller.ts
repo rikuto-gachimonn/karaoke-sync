@@ -36,6 +36,24 @@ export class PositionPreviewController {
       this.play();
     } catch (error) { if (this.valid(run)) await this.finish(run, String(error), true); }
   }
+  /** Tone-only check shares the preview ownership lock and cleanup; never creates a player. */
+  async testTone() {
+    if (this.state.busy || !this.dependencies.canStart()) return;
+    const run: Run = { active: true, target: 0, start: 0, end: 0, timers: new Set(), beeped: false };
+    this.run = run;
+    this.update({ busy: true, phase: 'preparing', message: '確認音を準備中', targetSec: undefined, positionSec: undefined, beeped: false });
+    try {
+      if (this.dependencies.hidden?.()) throw new Error('画面を表示してから開始してください');
+      run.tone = this.dependencies.createTone();
+      run.visibilityOff = this.dependencies.onHidden?.(() => { void this.finish(run, '確認音を停止しました'); });
+      this.later(run, 5000, () => { void this.finish(run, '確認音の準備期限を超えました', true); });
+      await run.tone.unlock();
+      if (!this.valid(run)) return;
+      run.tone.beep();
+      this.update({ phase: 'playing', beeped: true, message: '確認音を試しています' });
+      this.later(run, 200, () => { void this.finish(run, '確認音の試聴が終了しました'); });
+    } catch (error) { if (this.valid(run)) await this.finish(run, String(error), true); }
+  }
   play() {
     const run = this.run;
     if (!run || !this.valid(run) || this.state.phase !== 'ready') return;

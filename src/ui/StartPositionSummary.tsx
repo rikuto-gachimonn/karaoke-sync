@@ -16,7 +16,7 @@ export function StartPositionSummary({ input }: { input: SyncInput }) {
     <dl>
       <dt>検知継続時間による自動補正</dt>
       <dd><output aria-label="検知継続時間の自動補正量">{input.autoCompensateDetectionDuration === true ? `${signed(plan.detectionMs / 1000)}秒（${plan.detectionMs}ms）` : '自動補正：OFF（＋0.00秒）'}</output></dd>
-      <dd className="position-explanation">{input.autoCompensateDetectionDuration === true ? '検知が成立するまでの設定時間分、開始候補を進めます。実測した遅延ではありません。' : '検知継続時間は開始候補に加算しません。'}</dd>
+      <dd data-help className="position-explanation">{input.autoCompensateDetectionDuration === true ? '検知が成立するまでの設定時間分、開始候補を進めます。実測した遅延ではありません。' : '検知継続時間は開始候補に加算しません。'}</dd>
       <dt>手動補正（主調整）</dt>
       <dd><output aria-label="手動補正量">{signed((input.startAdjustmentMs ?? 0) / 1000)} 秒</output></dd>
       <dt>補正後の再生開始位置</dt>
