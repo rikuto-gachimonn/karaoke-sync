@@ -163,7 +163,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
     try {
       if (!libraryStatus.store) throw new Error('曲リストを読み込めません');
       setAudioPlan(planAudioSettings(library, { threshold: input.threshold, durationMs: input.durationMs },
-        (videoId, service) => loadSyncProfile(localStorage, videoId, service, 4), detectionMode));
+        (videoId, service) => loadSyncProfile(localStorage, videoId, service, 4), detectionMode, mode));
       setSaveMessage('');
     } catch (error) { setSaveMessage(`一括適用できません: ${String(error)}`); }
   }
@@ -184,7 +184,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         if (audioPlan.detectionMode && existingDetectionProfile(song.profiles[service], audioPlan.detectionMode)) modeDrafts.current.delete(draftKey(song.videoId, service, audioPlan.detectionMode));
       }
       setInput(previous => refreshAppliedAudioInput(previous, audioPlan));
-      setSaveMessage(`${detectionModeLabels[audioPlan.detectionMode!]}の${audioPlan.songCount}曲・${audioPlan.profileCount}件に音検知設定を適用しました。未保存の機種設定は追加していません`);
+      setSaveMessage(`${detectionModeLabels[audioPlan.detectionMode!]}の${audioPlan.songCount}曲・${audioPlan.profileCount}件に音検知設定を適用しました（新規作成${audioPlan.createdCount}件）`);
     } catch (error) { setSaveMessage(`一括適用に失敗しました: ${String(error)}`); }
     finally { setApplyingAudio(false); setAudioPlan(undefined); }
   }
@@ -258,7 +258,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <p>検知待機は新規設定で30分。保存済みの期限を優先します。現在: {(input.armedTimeoutMs ?? settings.defaultArmedTimeoutMs) / 1000}秒（変更は開発者向け設定）。</p>
       </fieldset>{audioPlan && <div className="import-preview" role="alertdialog" aria-modal="false" aria-labelledby="audio-apply-title" aria-describedby="audio-apply-description" aria-busy={applyingAudio}>
         <h2 id="audio-apply-title">音検知設定の全曲一括適用</h2>
-        <div id="audio-apply-description"><p>対象: {detectionModeLabels[audioPlan.detectionMode!]} / {audioPlan.songCount}曲・{audioPlan.profileCount}件。DAM {audioPlan.serviceCounts.DAM}件、JOYSOUND {audioPlan.serviceCounts.JOYSOUND}件、HOME {audioPlan.serviceCounts.HOME}件。他のモード・未登録機種は変更しません。</p>
+        <div id="audio-apply-description"><p>対象: {detectionModeLabels[audioPlan.detectionMode!]} / {audioPlan.songCount}曲・{audioPlan.profileCount}件。DAM {audioPlan.serviceCounts.DAM}件、JOYSOUND {audioPlan.serviceCounts.JOYSOUND}件、HOME {audioPlan.serviceCounts.HOME}件。新規作成 {audioPlan.createdCount}件。対象は曲・機種・選択モードの組み合わせです。他のモードは変更しません。</p>
         <p>上書き項目: 音量しきい値 {audioPlan.values.threshold}、検知継続時間 {audioPlan.values.durationMs}ms。</p>
         <p>この2項目だけを上書きして適用しますか？ 開始位置・補正・自動補正ON/OFFは保持します。</p></div>
         <div className="actions"><button autoFocus disabled={applyingAudio} onClick={() => { setAudioPlan(undefined); setSaveMessage('一括適用をキャンセルしました'); }}>キャンセル</button><button disabled={applyingAudio} onClick={() => { void applyAudioSettings(); }}>{applyingAudio ? '適用中…' : '適用'}</button></div>

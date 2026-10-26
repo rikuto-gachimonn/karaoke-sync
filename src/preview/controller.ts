@@ -59,7 +59,9 @@ export class PositionPreviewController {
     if (!run || !this.valid(run) || this.state.phase !== 'ready') return;
     try {
       void run.tone!.unlock().catch(error => { if (this.valid(run)) void this.finish(run, String(error), true); });
-      run.player!.seek?.(run.start); run.player!.play(0);
+      // prepare(videoId, start) has already completed CUED at this position.
+      // A second seek can emit delayed BUFFERING/CUED after PLAYING and cancel the preview.
+      run.player!.play(0);
     } catch (error) { void this.finish(run, String(error), true); }
   }
   private event(run: Run, event: PlayerEvent) {

@@ -17,11 +17,11 @@ function setup(canStart=true) {
  const preview=new PositionPreviewController({createPlayer:factory,createTone:audio,canStart:()=>canStart,hidden:()=>hidden,onHidden:callback=>{visibility=callback;return()=>{visibility=undefined;};}},()=>Date.now());
  return {preview,player,tone,prepare,seek,dispose,factory,audio,hide:()=>{hidden=true;visibility?.();}};
 }
-async function playing(target=30){const s=setup();await s.preview.start(id,target);s.player.emit({type:'playing'});await flush();return s;}
+async function playing(target=30){const s=setup();await s.preview.start(id,target);s.player.currentPosition=Math.max(0,target-2);s.player.emit({type:'playing'});await flush();return s;}
 async function tick(s:ReturnType<typeof setup>,position:number,ms=50){s.player.currentPosition=position;await vi.advanceTimersByTimeAsync(ms);await flush();}
 beforeEach(()=>vi.useFakeTimers());afterEach(()=>{vi.clearAllTimers();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('補正前の位置だけを確認するプレビュー',()=>{
- it.each([[30,28],[1,0],[0,0]])('基準%ssは%ssから準備する',async(target,start)=>{const s=setup();await s.preview.start(id,target);expect(s.prepare).toHaveBeenCalledExactlyOnceWith(id,start);expect(s.seek).toHaveBeenLastCalledWith(start);expect(s.preview.getSnapshot()).toMatchObject({busy:true,phase:'ready',targetSec:target,beeped:false});await s.preview.stop();expect(vi.getTimerCount()).toBe(0);});
+ it.each([[30,28],[1,0],[0,0]])('基準%ssは%ssから準備する',async(target,start)=>{const s=setup();await s.preview.start(id,target);expect(s.prepare).toHaveBeenCalledExactlyOnceWith(id,start);expect(s.seek).not.toHaveBeenCalled();expect(s.preview.getSnapshot()).toMatchObject({busy:true,phase:'ready',targetSec:target,beeped:false});await s.preview.stop();expect(vi.getTimerCount()).toBe(0);});
  it('30秒通過で1回鳴らし32秒で自動終了・全資源と監視を回収',async()=>{const s=await playing();for(let i=1;i<=40;i++)await tick(s,28+i*.05);expect(s.tone.beep).toHaveBeenCalledTimes(1);expect(s.preview.getSnapshot().beeped).toBe(true);for(let i=41;i<=80;i++)await tick(s,28+i*.05);expect(s.tone.beep).toHaveBeenCalledTimes(1);expect(s.preview.getSnapshot()).toMatchObject({busy:false,phase:'idle',beeped:true});expect(s.tone.close).toHaveBeenCalledTimes(1);expect(s.dispose).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);});
  it('1秒の基準を0秒から確認できる',async()=>{const s=await playing(1);for(let i=1;i<=20;i++)await tick(s,i*.05);expect(s.tone.beep).toHaveBeenCalledTimes(1);await s.preview.stop();});
  it('基準0は先頭近傍の最初の有効観測だけで1回鳴る',async()=>{const s=await playing(0);expect(s.tone.beep).toHaveBeenCalledTimes(1);await tick(s,.05);expect(s.tone.beep).toHaveBeenCalledTimes(1);await s.preview.stop();});
@@ -88,5 +88,22 @@ describe('0.60上限の確認音',()=>{
   expect(context.oscillator.frequency.value).toBe(880);expect(context.oscillator.stop).toHaveBeenCalledWith(10.16);
   expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(.60,10.01);expect(context.gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0,10.15);
   await vi.advanceTimersByTimeAsync(200);expect(context.state).toBe('closed');
+ });
+});
+
+describe('冒頭プレビューの終了時刻',()=>{
+ it.each([[0,2],[1,3],[30,32]])('基準%s秒は動画位置%s秒まで進み1回鳴って終了する',async(target,end)=>{
+  const s=await playing(target),start=Math.max(0,target-2);
+  for(let i=1;i<=(end-start)*20;i++){await tick(s,start+i/20);if(start+i/20<end)expect(s.preview.getSnapshot().busy).toBe(true);}
+  expect(s.tone.beep).toHaveBeenCalledTimes(1);expect(s.preview.getSnapshot()).toMatchObject({busy:false,phase:'idle'});expect(vi.getTimerCount()).toBe(0);
+ });
+ it('2秒未満の動画は0秒で鳴り末尾で安全に終了する',async()=>{
+  const s=setup();s.player.videoDuration=1.2;await s.preview.start(id,0);s.player.emit({type:'playing'});await flush();
+  for(let i=1;i<=24;i++){await tick(s,i/20);if(i<24)expect(s.preview.getSnapshot().busy).toBe(true);}
+  expect(s.preview.getSnapshot()).toMatchObject({busy:false,phase:'idle'});expect(s.tone.beep).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
+ });
+ it('冒頭でも実際のバッファリング・停止・シーク飛びは中止する',async()=>{
+  for(const type of ['buffering','paused','cued'] as const){const s=await playing(0);s.player.emit({type});await flush();expect(s.preview.getSnapshot()).toMatchObject({busy:false,phase:'error'});expect(s.tone.beep).toHaveBeenCalledTimes(1);}
+  const s=await playing(0);await tick(s,1.5);expect(s.preview.getSnapshot()).toMatchObject({busy:false,phase:'error'});
  });
 });
