@@ -74,15 +74,15 @@ describe('2項目だけの一括適用と単一コミット',()=>{
  it.each(detectionModes)('%sは余分な同期入力を渡しても音検知2項目だけ変更し全データを保護',mode=>{
    const original=library(),before=structuredClone(original),source={...fresh(mode),durationMs:300,threshold:.077,offsetSec:-1.2,startAdjustmentMs:123,stabilizationWaitMs:400,preseekBeforeDetection:true,playbackMode:'preplay' as const,compensation:{mode:'combined' as const,waitMs:50,offsetMs:-80}};
    const plan=planAudioSettings(original,source,undefined,mode);
-   expect(plan).toMatchObject({songCount:2,profileCount:4,serviceCounts:{DAM:2,JOYSOUND:1,HOME:1}});
+   expect(plan).toMatchObject({songCount:2,profileCount:6,createdCount:2,serviceCounts:{DAM:2,JOYSOUND:2,HOME:2}});
    for(const [index,song] of plan.library.songs.entries())for(const [service,profile] of Object.entries(song.profiles)){
-     const old=before.songs[index]!.profiles[service as 'DAM']!;expect({...profile,modeProfiles:undefined}).toEqual({...old,modeProfiles:undefined});
+     const old=before.songs[index]!.profiles[service as 'DAM'];if(!old){expect(existingDetectionProfile(profile,mode)!.input).toMatchObject({threshold:.077,durationMs:300});continue;}expect({...profile,modeProfiles:undefined}).toEqual({...old,modeProfiles:undefined});
      const other=mode==='vocal'?'accompaniment':'vocal';expect(profile.modeProfiles![other]).toEqual(old.modeProfiles![other]);
      const saved=existingDetectionProfile(profile,mode)!;expect(saved.input).toEqual({...old.modeProfiles![mode]!.input,threshold:.077,durationMs:300});expect(saved.retainMic).toBe(old.modeProfiles![mode]!.retainMic);
    }
-   expect(plan.library.songs[1]!.profiles.JOYSOUND).toBeUndefined();expect(original).toEqual(before);
+   expect(plan.library.songs[1]!.profiles.JOYSOUND).toBeDefined();expect(original).toEqual(before);
  });
- it('存在しないモードの保存枠を増やさない',()=>{const current=library();current.songs[1]!.profiles.DAM=withDetectionProfile(undefined,{input:{...fresh('accompaniment'),videoId:b},retainMic:true});const plan=planAudioSettings(current,fresh(),undefined,'vocal');expect(plan.profileCount).toBe(3);expect(plan.library.songs[1]).toEqual(current.songs[1]);});
+ it('存在しないモードの保存枠を作成して他方の同期設定を保持',()=>{const current=library();current.songs[1]!.profiles.DAM=withDetectionProfile(undefined,{input:{...fresh('accompaniment'),videoId:b},retainMic:true});const plan=planAudioSettings(current,fresh(),undefined,'vocal');expect(plan.profileCount).toBe(6);expect(plan.library.songs[1]!.profiles.DAM!.modeProfiles!.accompaniment).toEqual(current.songs[1]!.profiles.DAM!.modeProfiles!.accompaniment);expect(existingDetectionProfile(plan.library.songs[1]!.profiles.DAM,'vocal')).toBeDefined();});
  it('取消・保存失敗でメモリも永続データも部分更新しない',()=>{const s=storage(),store=new SongLibrary(s,4);store.commit(library());const before=[...s.data],snapshot=store.snapshot();s.setItem.mockClear();const plan=planAudioSettings(snapshot,fresh(),undefined,'vocal');expect([...s.data]).toEqual(before);expect(s.setItem).not.toHaveBeenCalled();s.setItem.mockImplementationOnce(()=>{throw Error('quota');});expect(()=>store.commit(plan.library)).toThrow('quota');expect(store.snapshot()).toEqual(snapshot);expect([...s.data]).toEqual(before);store.commit(plan.library);expect(new SongLibrary(s,4).snapshot()).toEqual(plan.library);});
 });
 

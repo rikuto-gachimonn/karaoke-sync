@@ -1,3 +1,4 @@
+import { PositionPreviewController } from '../src/preview/controller';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { YouTubePlayer } from '../src/adapters/youtube/player';
 import type { YouTubeApi, YouTubeHandle, YouTubeOptions } from '../src/adapters/youtube/api';
@@ -320,4 +321,21 @@ describe('YouTubeエラー説明の回帰',()=>{
     expect(s.events.at(-1)).toMatchObject({type:'error'});const event=s.events.at(-1)!;if(event.type==='error'){expect(event.message).toContain('YouTube '+code+':');if(code===101||code===150)expect(event.message).toContain('動画所有者側の設定');}
     await s.player.dispose();expect(s.handle.destroy).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('IFrameを使う開始位置プレビュー',()=>{
+ it.each([0,1,30])('プレビューはcue済みの%s秒を再シークせず最後まで再生する',async target=>{
+  const s=youtube(), start=Math.max(0,target-2), end=target+2;let position=start;
+  const tone={unlock:vi.fn(async()=>{}),beep:vi.fn(),close:vi.fn(async()=>{})};
+  // A seek can enqueue BUFFERING after PLAYING. Repeating an already completed cue introduces this race.
+  const seekTo=vi.fn(()=>{queueMicrotask(()=>s.state(3));});
+  Object.assign(s.handle,{getDuration:()=>240,getCurrentTime:()=>position,seekTo});
+  vi.mocked(s.handle.playVideo).mockImplementation(()=>s.state(1));
+  const preview=new PositionPreviewController({createPlayer:()=>s.player,createTone:()=>tone,canStart:()=>true},()=>Date.now());
+  const pending=preview.start('dQw4w9WgXcQ',target);await flush();s.options().events.onReady({target:s.handle});await flush();s.state(5);await pending;await flush();
+  expect(preview.getSnapshot()).toMatchObject({busy:true,phase:'playing'});expect(seekTo).not.toHaveBeenCalled();
+  expect(s.handle.cueVideoById).toHaveBeenCalledWith({videoId:'dQw4w9WgXcQ',startSeconds:start});
+  for(let i=1;i<=(end-start)*20;i++){position=start+i/20;await vi.advanceTimersByTimeAsync(50);if(position<end)expect(preview.getSnapshot().busy).toBe(true);}
+  expect(tone.beep).toHaveBeenCalledTimes(1);expect(preview.getSnapshot()).toMatchObject({busy:false,phase:'idle'});expect(s.handle.destroy).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
+ });
 });

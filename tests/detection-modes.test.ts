@@ -80,7 +80,7 @@ describe('独立した2種類の検知モードと互換保存', () => {
     expect(existingDetectionProfile(loadSyncProfile(st, a, 'DAM', 4), 'vocal')!.input.durationMs).toBe(200);
     expect(existingDetectionProfile(loadSyncProfile(st, a, 'DAM', 4), 'accompaniment')!.input.durationMs).toBe(500); expect(st.data.get(preferencesV3Key)).toBe(before);
   });
-  it('選択中モードだけの全曲適用は他方・旧レコード・未登録機種・未知の保存枠を保持', () => {
+  it('選択中モードだけの全曲適用は他方・旧レコード・未知の保存枠を保持し未登録機種を作成', () => {
     const source = legacy('cue'); source.modeProfiles = { future: { input: { ...source.input }, retainMic: false } };
     let profile = withDetectionProfile(source, defaultDetectionProfile(a, 'DAM', 'vocal'));
     profile = withDetectionProfile(profile, defaultDetectionProfile(a, 'DAM', 'accompaniment'));
@@ -88,13 +88,13 @@ describe('独立した2種類の検知モードと互換保存', () => {
     const library = { ...emptyLibrary(), songs }, before = structuredClone(library);
     expect(() => planAudioSettings(library, { threshold: .12, durationMs: 600 })).toThrow('対象モード');
     const plan = planAudioSettings(library, { threshold: .12, durationMs: 600 }, undefined, 'vocal');
-    expect(plan).toMatchObject({ songCount: 2, profileCount: 2 });
+    expect(plan).toMatchObject({ songCount: 2, profileCount: 6, createdCount: 4 });
     const updated = plan.library.songs[0]!.profiles.DAM!;
     expect(existingDetectionProfile(updated, 'vocal')!.input).toMatchObject({ threshold: .12, durationMs: 600 });
     expect(updated.input).toEqual(before.songs[0]!.profiles.DAM!.input);
     expect(updated.modeProfiles!.accompaniment).toEqual(profile.modeProfiles!.accompaniment); expect(updated.modeProfiles!.future).toEqual(profile.modeProfiles!.future);
-    expect(plan.library.songs[0]!.profiles.JOYSOUND).toBeUndefined(); expect(library).toEqual(before);
-    expect(() => planAudioSettings({ ...emptyLibrary(), songs: [songs[1]!] }, { threshold: .1, durationMs: 200 }, undefined, 'accompaniment')).toThrow('保存済み');
+    expect(existingDetectionProfile(plan.library.songs[0]!.profiles.JOYSOUND, 'vocal')!.input.threshold).toBe(.12); expect(library).toEqual(before);
+    expect(planAudioSettings({ ...emptyLibrary(), songs: [songs[1]!] }, { threshold: .1, durationMs: 200 }, undefined, 'accompaniment')).toMatchObject({profileCount:3,createdCount:3});
   });
   it('旧バックアップの復元は該当モードだけを更新し他方を消さない', () => {
     const st = storage(), old = new SongLibrary(st, 3); old.commit(upsertSong(emptyLibrary(), { videoId: a, title: '曲', artist: '', profiles: { DAM: legacy('accompaniment') } }));
