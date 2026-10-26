@@ -461,7 +461,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       </div></details>
     </div></details>
     </div>
-    <div className="display-preferences"><label><input type="checkbox" checked={display.showHelp} onChange={event => changeDisplay({ ...display, showHelp: event.target.checked })} />詳しい説明を表示</label><span>{display.showHelp ? 'ON' : 'OFF'}</span></div>
+    <div className="display-preferences"><label><span className="display-preferences-text">詳しい説明を表示</span><span className="display-preferences-control"><input type="checkbox" role="switch" checked={display.showHelp} onChange={event => changeDisplay({ ...display, showHelp: event.target.checked })} /><span aria-hidden="true">{display.showHelp ? 'ON' : 'OFF'}</span></span></label></div>
     {displayError && <p role="alert">{displayError}</p>}
   </main>;
 }

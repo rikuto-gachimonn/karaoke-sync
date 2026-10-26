@@ -192,5 +192,10 @@ caption { text-align: left; margin-bottom: 8px; }
 .tone-volume-row { display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .tone-volume-row input { flex: 1; min-width: 0; width: 100%; min-height: 44px; }
 .tone-volume-row output { min-width: 4ch; font-variant-numeric: tabular-nums; }
-.display-preferences { display: flex; align-items: center; justify-content: center; gap: .6rem; margin-block: 1.5rem; font-size: .9rem; }
-.display-preferences label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.display-preferences { width: fit-content; max-width: 100%; margin: 1rem auto; font-size: .9rem; }
+.display-preferences label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; min-height: 44px; }
+.display-preferences-text { min-width: 0; writing-mode: horizontal-tb; word-break: normal; overflow-wrap: break-word; }
+.display-preferences-control { display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
+/* Override full-width text-input defaults only for this checkbox. */
+.display-preferences input { width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; margin: 0; flex: none; }
+.display-preferences-control > span { min-width: 3ch; }
