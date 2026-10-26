@@ -27,18 +27,17 @@ export function createApp(mode: 'real' | 'simulation' = 'real', host: () => HTML
   const meter = new MeteredAudioInput(dependencies.audio);
   let calibration: CalibrationController;
   let preview: PositionPreviewController;
-  let previewVolume = 30;
-  let previewVolumeScale: 1 | 2 = 2;
+  let previewVolume = 20;
   const controller = new SessionController({ ...dependencies, audio: meter, allowPrepare: () => !calibration?.getSnapshot().busy && !meter.busy && !preview?.getSnapshot().busy }, log, options);
   calibration = new CalibrationController(meter, () => controller.stop(), () => controller.getSnapshot().canPrepare && !preview?.getSnapshot().busy, diagnostic);
   preview = new PositionPreviewController({
     createPlayer: mode === 'simulation' ? () => new SimulatedPreviewPlayer() : dependencies.createPlayer,
-    createTone: () => new BrowserPreviewTone(previewVolume, previewVolumeScale),
+    createTone: () => new BrowserPreviewTone(previewVolume),
     canStart: () => controller.getSnapshot().canPrepare && !calibration.getSnapshot().busy && !meter.busy,
     hidden: () => document.hidden,
     onHidden: callback => { const changed = () => { if (document.hidden) callback(); }; document.addEventListener('visibilitychange', changed); return () => document.removeEventListener('visibilitychange', changed); },
   });
   const stopAll = async () => { const endingPreview = preview.stop(); await calibration.cancel(); await controller.stop(); await endingPreview; };
-  return { setPreviewVolume: (value: number, scale: 1 | 2 = 2) => { previewVolume = value; previewVolumeScale = scale; }, controller, preview, simulation, mode, meter, calibration, stopAll, setRetainMic: (value: boolean) => { if (controller.getSnapshot().canPrepare) options.retainMic = value; } };
+  return { setPreviewVolume: (value: number) => { previewVolume = value; }, controller, preview, simulation, mode, meter, calibration, stopAll, setRetainMic: (value: boolean) => { if (controller.getSnapshot().canPrepare) options.retainMic = value; } };
 }
 export type AppServices = ReturnType<typeof createApp>;
