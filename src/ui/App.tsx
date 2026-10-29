@@ -231,7 +231,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
     }catch(error){setSaveMessage(String(error));}
   }
   return <main className="karaoke-app" data-show-help={display.showHelp}>
-    <header className="app-header"><h1>SyncLab</h1><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
+    <header className="app-header"><div className="app-title-actions"><h1>SyncLab</h1><a className="guide-link" href={active ? undefined : `${import.meta.env.BASE_URL}guide/synclab-guide.png`} role="link" aria-disabled={active || undefined} tabIndex={active ? -1 : 0} title={active ? '検知・再生・プレビューを停止してから開いてください' : 'ガイド画像を別タブで開きます'} target="_blank" rel="noopener noreferrer" aria-label="使い方ガイド（画像を別タブで開きます）">使い方ガイド</a></div><span>{mode === 'simulation' ? '模擬モード' : '実接続'}</span></header>
     <p className="session-notice" role="status" aria-live="polite">{state.notice}</p>
     <div className="performance-area">
       <section id="current-song" className="current-song" aria-label="選択中の曲" tabIndex={-1}>

@@ -7,7 +7,10 @@ h1 { font-size: 1.3rem; margin-bottom: 0; }
 h2 { font-size: 1rem; margin-bottom: 6px; }
 h3 { font-size: 1rem; }
 p { margin-bottom: 8px; }
-.app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.app-header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.app-title-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.guide-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; max-width: 100%; padding: 8px 10px; border: 1px solid #78958b; border-radius: 7px; background: #eaf4f0; color: #173d30; font-size: .85rem; text-decoration: none; white-space: nowrap; }
+.guide-link[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }
 .app-header span { font-size: .75rem; color: #48675e; }
 .performance-area, .tools-area { min-width: 0; }
 section, .tool-panel { background: white; border: 1px solid #cad9d3; border-radius: 10px; margin-bottom: 10px; }

@@ -14,7 +14,7 @@ export function hasSearchExclusion(html:string):boolean {
 }
 export function allowedArtifactPath(name:string) {
   if(name.includes('\\')||name.split('/').some(part=>!part||part==='.'||part==='..'||part.startsWith('.')))return false;
-  return rootNames.has(name)||/^assets\/[\w.-]+\.(?:js|css|svg|png|jpe?g|webp|ico|woff2?)$/.test(name);
+  return name==='guide/synclab-guide.png'||rootNames.has(name)||/^assets\/[\w.-]+\.(?:js|css|svg|png|jpe?g|webp|ico|woff2?)$/.test(name);
 }
 export function secretRules(text:string):string[] {
   const rules:Record<string,RegExp>={
@@ -61,7 +61,7 @@ export function inspectArtifact(files:Map<string,string>, base='/') {
   return problems;
 }
 /** 現在使用する/*ルールだけを検査用に適用。Cloudflareの完全エミュレーターではない。 */
-export function staticResponse(files:Map<string,string>, requestUrl:string, base='/') {
+export function staticResponse(files:Map<string,string>, requestUrl:string, base='/', binaryFiles:Map<string,Uint8Array>=new Map()) {
   let pathname:string;
   try { pathname=decodeURIComponent(requestUrl.split('?')[0]!); } catch {return {status:400,headers:{'Content-Type':'text/plain'},body:'Bad request'};}
   const mounted=pathname.startsWith(base);
@@ -70,7 +70,7 @@ export function staticResponse(files:Map<string,string>, requestUrl:string, base
   const exists=allowedArtifactPath(name)&&name!=='_headers'&&files.has(name);
   const file=exists?name:'404.html';
   const type=extname(file)==='.js'?'text/javascript':extname(file)==='.css'?'text/css':extname(file)==='.html'?'text/html':'application/octet-stream';
-  const headers:Record<string,string>={'Content-Type':type+'; charset=utf-8'};
+  const headers:Record<string,string>={'Content-Type':extname(file)==='.png'?'image/png':type+'; charset=utf-8'};
   for(const line of (files.get('_headers')??'').split(/\r?\n/)) {const match=line.match(/^\s+([\w-]+):\s*(.+)$/);if(match)headers[match[1]!]=match[2]!;}
-  return {status:exists?200:404,headers,body:files.get(file)??'Not found'};
+  return {status:exists?200:404,headers,body:binaryFiles.get(file)??files.get(file)??'Not found'};
 }
