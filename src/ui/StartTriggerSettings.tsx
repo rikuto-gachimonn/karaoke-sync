@@ -10,6 +10,7 @@ export function StartTriggerSettings({ input, disabled, onChange, onModeChange }
       if (onModeChange) onModeChange(next); else onChange({ ...input, startTrigger: next });
     }}>{detectionModes.map(value => <option key={value} value={value}>{detectionModeLabels[value]}</option>)}</select></label>
     <p data-help>{selected === 'vocal' ? '自分の歌い始めを合図にします。' : 'カラオケの伴奏の始まりを合図にします。'}どちらも同じ音量と継続時間の判定です。歌声・音楽・話者を識別しません。</p>
+    <p data-help className="detection-mode-advice">{selected === 'vocal' ? 'カラオケのBGM音量は最初に小さめに設定することをおすすめします' : '伴奏の小さい音から検知できるよう、カラオケの音量に合わせてしきい値を調整してください。'}</p>
     {input.threshold === 0 && <small>しきい値0では無音（RMS 0）も判定対象です。</small>}
 
   </fieldset></div>;

@@ -20,10 +20,10 @@ function legacy(trigger?: StartTrigger) {
   profile.retainMic = false; return profile;
 }
 describe('独立した2種類の検知モードと互換保存', () => {
-  it('新規モードは0.035/200msで、UIは歌声・伴奏だけを表示', () => {
+  it('新規モードは0.05/200msで、UIは歌声・伴奏だけを表示', () => {
     expect(detectionModes).toEqual(['vocal', 'accompaniment']);
     const input = defaultDetectionProfile(a, 'DAM', 'vocal').input;
-    expect(input).toMatchObject({ startTrigger: 'vocal', threshold: .035, durationMs: 200 });
+    expect(input).toMatchObject({ startTrigger: 'vocal', threshold: .05, durationMs: 200 });
     const html = renderToStaticMarkup(createElement(StartTriggerSettings, { input, disabled: false, onChange: vi.fn() }));
     expect([...html.matchAll(/<option[^>]*value="([^"]+)"/g)].map(m => m[1])).toEqual(['vocal', 'accompaniment']);
     expect(html).toContain('value="vocal" selected'); expect(html).toContain('歌声検知'); expect(html).toContain('伴奏検知'); expect(html).toContain('識別しません');
@@ -148,7 +148,7 @@ describe('独立した2種類の検知モードと互換保存', () => {
   it.each(detectionModes)('%sも共通検知器で等号境界・継続200ms・一度だけの再生を守る', async mode => {
     const player = new SimulatedPlayer(), lease = new SimulatedLease(), detector = new SustainedVolumeDetector();
     const controller = new SessionController({ createPlayer: () => player, audio: { acquire: async () => lease }, createDetector: () => detector });
-    const play = vi.spyOn(player, 'play'); await controller.prepare(defaultDetectionProfile(a, 'DAM', mode, 'simulation').input);
+    const play = vi.spyOn(player, 'play'); await controller.prepare({...defaultDetectionProfile(a, 'DAM', mode, 'simulation').input,threshold:.035});
     lease.sample({ rms: .035, timeMs: 0 }); lease.sample({ rms: .034, timeMs: 50 });
     lease.sample({ rms: .035, timeMs: 100 }); lease.sample({ rms: .035, timeMs: 200 });
     expect(play).not.toHaveBeenCalled(); lease.sample({ rms: .035, timeMs: 300 });

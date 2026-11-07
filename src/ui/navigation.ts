@@ -109,3 +109,17 @@ export function createPlaybackNavigator(page?: Document, view?: ScrollView,
     cancel,
   };
 }
+
+/** Manual close only: retain mounted inputs and wait for collapsed layout before moving. */
+export function closeSettingsPanel(panel: HTMLDetailsElement, view: ScrollView = window) {
+  panel.open = false;
+  const scrolls = queue(view), ticket = scrolls.reserve();
+  scrolls.schedule(ticket, () => {
+    if (!panel.isConnected || panel.open) return;
+    const summary = panel.querySelector<HTMLElement>(':scope > summary');
+    if (!summary) return;
+    summary.focus({ preventScroll: true });
+    scrolls.moved(ticket);
+    summary.scrollIntoView({ behavior: view.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth', block: 'start', inline: 'nearest' });
+  });
+}

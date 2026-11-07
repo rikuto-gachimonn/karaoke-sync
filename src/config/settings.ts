@@ -9,7 +9,7 @@ export const settings = {
   maxStartAdjustmentMs: 86_400_000,
   defaultThreshold: 0.08, // 検証ページの既定値は維持
   defaultDurationMs: 50,
-  normalThreshold: 0.035,
+  normalThreshold: 0.05,
   normalDurationMs: 200,
   maxDurationMs: 2_000,
   maxOffsetSec: 30,
