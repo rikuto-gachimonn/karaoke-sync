@@ -152,7 +152,7 @@ describe('4秒測定の安全性',()=>{
 describe('提案採用と曲・環境別保存',()=>{
   it.each(['DAM','JOYSOUND','HOME'] as const)('%sのしきい値のみ採用・保存・復元する',service=>{
     const data=new Map<string,string>();const storage={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>{data.set(key,value);}};
-    const original=defaultProfile(id,service);const changed=adoptThreshold(original.input,0.055);expect(original.input.threshold).toBe(0.035);expect({...changed,threshold:0.035}).toEqual(original.input);
+    const original=defaultProfile(id,service);const changed=adoptThreshold(original.input,0.055);expect(original.input.threshold).toBe(0.05);expect({...changed,threshold:0.05}).toEqual(original.input);
     const store=new SongLibrary(storage,2);store.commit(upsertSong(emptyLibrary(),{videoId:id,title:'曲',artist:'',profiles:{[service]:{...original,input:changed}}}));
     const restored=parseImport(store.export()).library.songs[0]!;expect(restored.profiles[service]!.input.threshold).toBe(0.055);
     expect(Object.keys(restored.profiles)).toEqual([service]);expect(storage.getItem(libraryV2Key)).not.toBeNull();

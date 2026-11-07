@@ -202,3 +202,8 @@ caption { text-align: left; margin-bottom: 8px; }
 /* Override full-width text-input defaults only for this checkbox. */
 .display-preferences input { width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; margin: 0; flex: none; }
 .display-preferences-control > span { min-width: 3ch; }
+
+.preview-controls .preview-start { min-height:44px; padding:6px 8px; font-size:.8rem; background:transparent; flex:0 1 auto; }
+.close-settings { display:block; width:100%; min-height:44px; margin-top:12px; }
+.close-settings, .correction-prepare { white-space:normal; }
+.tool-panel > summary, .correction-card > summary { scroll-margin-block:max(80px, env(safe-area-inset-top)) 16px; }
