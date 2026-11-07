@@ -114,10 +114,12 @@ export class SessionController {
     try {
       context.playerOff = context.player.subscribe(event => this.onPlayer(context, event));
       if (snapshot.playbackMode === 'preplay') {
-        await this.deadline(context.player.prepare(snapshot.videoId, 0), this.options.prepareTimeoutMs, '動画準備期限超過');
+        const cueStartSec = snapshot.preseekBeforeDetection ? playbackPlan(snapshot).seekSec : 0;
+        this.log.add(generation, 'preplay.cue.request', JSON.stringify({ startSec: cueStartSec, targetPosition: snapshot.preseekBeforeDetection === true }));
+        await this.deadline(context.player.prepare(snapshot.videoId, cueStartSec), this.options.prepareTimeoutMs, '動画準備期限超過');
         if (this.valid(context)) {
           this.log.add(generation, 'player.prepared');
-          this.update({ phase: 'preplay', mic: 'off', message: 'YouTube内の再生ボタンを直接タップしてください。再生確認後に自動一時停止します' });
+          this.update({ phase: 'preplay', mic: 'off', message: snapshot.preseekBeforeDetection ? `補正後の開始候補${cueStartSec.toFixed(2)}秒付近を準備しました。YouTube内の再生ボタンを直接タップしてください。再生確認後に一時停止・位置確認します（読み込み完了や実発音の同期は未保証）` : 'YouTube内の再生ボタンを直接タップしてください。再生確認後に自動一時停止します' });
         }
         return;
       }
