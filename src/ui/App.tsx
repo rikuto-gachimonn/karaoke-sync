@@ -1,3 +1,4 @@
+import { showLiveAdjustmentControls } from './features';
 import { CloseSettingsButton } from './CloseSettingsButton';
 import { defaultDisplayPreferences, loadDisplayPreferences, writeDisplayPreferences, type DisplayPreferences } from '../app/displayPreferences';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -305,7 +306,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <p className="player-hint" hidden={playbackControls || previewState.busy}>{input.playbackMode === 'preplay' ? '準備 → 事前手動再生待ち → YouTube内の▶をタップ' : '従来方式：準備・検知待機中はYouTubeを操作しないでください'}</p>
       </section>
       {saveMessage && <p role="status" className="save-status">{saveMessage}</p>}
-      <section className="live-adjustment" aria-label="歌唱中の位置調整">
+      <section className="live-adjustment" hidden={!showLiveAdjustmentControls} aria-label="歌唱中の位置調整">
         <h2>歌唱中の位置調整</h2>
         <div className="live-primary-actions">
         <button disabled={state.phase!=='playing'} onClick={()=>{
@@ -368,8 +369,7 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <CloseSettingsButton />
         </div>
       </details>
-      {(historyStatus.error||historyError)&&<p role="alert">補正結果の記録: {historyStatus.error||historyError}。元データを上書きせず保持します。</p>}
-      {result&&recommendation&&recommendation.remainingMs!==0&&result.dismissedTotalMs!==result.totalMs&&<section className="recommendation-card" aria-label="次回の同期調整の提案">
+      {result&&recommendation&&recommendation.remainingMs!==0&&result.dismissedTotalMs!==result.totalMs&&<section className="recommendation-card" hidden={!showLiveAdjustmentControls} aria-label="次回の同期調整の提案">
         <h3>次回の同期調整の提案</h3>
         <p>{library.songs.find(song=>song.videoId===result.input.videoId)?.title??result.input.videoId} / {environmentLabels[result.input.service]} / {triggerLabels[selectedTrigger(result.input)]}</p>
         <p>現在の保存設定: {(playbackPlan(savedForRecommendation!).userPositionMs/1000).toFixed(3)}秒（未保存の場合は試行開始時）</p>
@@ -378,7 +378,6 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
         <p>今回の操作履歴から、次回は{Math.abs(recommendation.remainingMs)}ms{recommendation.remainingMs>0?'進める':'戻す'}候補です。実移動・次回の同期成功を保証しません。</p>
         <div className="actions"><button disabled={switchingSong||measurement.busy||previewState.busy||applyingAudio||!!audioPlan||(!state.canPrepare&&state.phase!=='playing')} onClick={adoptResult}>推奨値を適用・保存</button><button onClick={()=>{try{historyStatus.store?.dismiss(result.id);}catch(error){setHistoryError(String(error));}}}>今回は変更しない</button></div>
       </section>}
-      {recommendationError&&<p role="alert">推奨値を計算できません: {recommendationError}</p>}
 
     </div>
     <div className="tools-area">
@@ -442,6 +441,8 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       <p>継続時間が0msより大きい場合、100ms以内の間隔で音の観測を継続する必要があります。0msなら1観測で検知します。</p>
     </div></details>}
     <details id="diagnostics-panel" className="tool-panel"><summary>診断ログ・JSON保存</summary><div className="panel-body">
+      {(historyStatus.error||historyError)&&<p role="alert">補正結果の記録: {historyStatus.error||historyError}。元データを上書きせず保持します。</p>}
+      {recommendationError&&<p role="alert">推奨値を計算できません: {recommendationError}</p>}
       <p>単調時計の時刻（ms）。実際のイヤホン発音時刻ではありません。上限による破棄: {controller.log.dropped}件</p>
       <button onClick={() => {
         const blob = new Blob([JSON.stringify({ mode, clock: 'performance.now (ms); audible output not measured', userAgent: navigator.userAgent, origin:window.location.origin, retainMic, input, dropped: controller.log.dropped, entries: logs, triggerTrials:controller.exportTrials(),liveResults:results,latency:latencySummary(controller.exportTrials().trials) }, null, 2)], { type: 'application/json' });
