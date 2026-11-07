@@ -407,7 +407,8 @@ export function App({ controller, preview, simulation, mode, setRetainMic, meter
       <p>通常の位置調整はメイン画面で行ってください。折りたたんでも保存値・編集中の値は維持されます。</p>
       <fieldset disabled={active}><legend>停止中のみ変更可能</legend>
         <label>安定化待機（ms・比較用）<input type="number" min="0" max="60000" step="1" value={input.stabilizationWaitMs??0} onChange={event=>setInput({...input,stabilizationWaitMs:event.target.valueAsNumber})}/></label>
-        <label className="check"><input type="checkbox" checked={input.preseekBeforeDetection??false} onChange={event=>setInput({...input,preseekBeforeDetection:event.target.checked})}/>事前シークを比較する（事前再生方式のみ・実機未検証）</label>
+        <label className="check"><input type="checkbox" checked={input.preseekBeforeDetection??false} onChange={event=>setInput({...input,preseekBeforeDetection:event.target.checked})}/>目的位置から事前再生する（事前再生方式のみ・比較用・実機未検証）</label>
+        <p>比較設定をONにすると、補正後の開始候補から手動再生し、一時停止・位置確認後に検知待機します。OFFでは従来どおり0秒から準備します。目的位置の読み込み完了やBluetoothでの同期精度は保証しません。</p>
         <p>初期値0ms・事前シーク無効。ばらつき低減は未確認です。安定化待機分だけ動画開始位置を進め、既存の比較A待機は従来どおり位置へ加算しません。待機分の映像・歌唱冒頭を飛ばす可能性があります。</p>
         <label>同期補正方式<select value={compensation.mode} onChange={event => changeCompensation({ mode: event.target.value as Compensation['mode'] })}><option value="baseline">基準</option><option value="wait">A：固定待機</option><option value="position">B：位置補正</option><option value="combined">A＋B：組み合わせ</option></select></label>
         <label>A 固定待機（ms）<input type="number" min="0" max="60000" step="1" value={Number.isNaN(compensation.waitMs) ? '' : compensation.waitMs} onChange={event => changeCompensation({ waitMs: event.target.valueAsNumber })} /></label>

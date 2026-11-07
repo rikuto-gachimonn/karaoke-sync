@@ -1,3 +1,4 @@
+import { defaultDetectionProfile } from '../src/app/detectionModes';
 import { PositionPreviewController } from '../src/preview/controller';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { YouTubePlayer } from '../src/adapters/youtube/player';
@@ -6,7 +7,7 @@ import { BrowserAudioInput, rms, type AudioEnvironment } from '../src/adapters/a
 import { AudioAcquireError, type PlayerEvent } from '../src/session/ports';
 import { settings } from '../src/config/settings';
 import { SessionController } from '../src/session/controller';
-import { SimulatedPlayer } from '../src/adapters/simulation';
+import { SimulatedPlayer, SimulatedLease } from '../src/adapters/simulation';
 import { SustainedVolumeDetector } from '../src/domain/detector';
 
 async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
@@ -337,5 +338,22 @@ describe('IFrameを使う開始位置プレビュー',()=>{
   expect(s.handle.cueVideoById).toHaveBeenCalledWith({videoId:'dQw4w9WgXcQ',startSeconds:start});
   for(let i=1;i<=(end-start)*20;i++){position=start+i/20;await vi.advanceTimersByTimeAsync(50);if(position<end)expect(preview.getSnapshot().busy).toBe(true);}
   expect(tone.beep).toHaveBeenCalledTimes(1);expect(preview.getSnapshot()).toMatchObject({busy:false,phase:'idle'});expect(s.handle.destroy).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
+ });
+});
+
+describe('補正後位置のcueから事前再生するIFrame連携',()=>{
+ it.each([['vocal',2],['vocal',32],['vocal',60],['accompaniment',2],['accompaniment',32],['accompaniment',60]] as const)('%s・%s秒はstartSecondsへ補正を1回反映しPAUSED確認後に検知',async(mode,base)=>{
+  const s=youtube(),lease=new SimulatedLease();let position=0;
+  const original=vi.mocked(s.handle.cueVideoById).getMockImplementation()!;
+  vi.mocked(s.handle.cueVideoById).mockImplementation(value=>{original(value);position=value.startSeconds;});
+  const seekTo=vi.fn((target:number)=>{position=target;});Object.assign(s.handle,{getCurrentTime:()=>position,getDuration:()=>240,seekTo});
+  vi.mocked(s.handle.playVideo).mockImplementation(()=>s.state(1));
+  const acquire=vi.fn(async()=>lease),controller=new SessionController({createPlayer:()=>s.player,audio:{acquire},createDetector:()=>new SustainedVolumeDetector()});
+  const input={...defaultDetectionProfile('dQw4w9WgXcQ','DAM',mode).input,savedPositionSec:mode==='accompaniment'?base:99,vocalPositionSec:mode==='vocal'?base:99,preseekBeforeDetection:true};
+  const pending=controller.prepare(input);await flush();s.options().events.onReady({target:s.handle});await flush();s.state(5);await pending;
+  expect(s.handle.cueVideoById).toHaveBeenCalledWith({videoId:input.videoId,startSeconds:base+.2});expect(acquire).not.toHaveBeenCalled();expect(s.handle.playVideo).not.toHaveBeenCalled();
+  s.state(1);await flush();expect(s.handle.pauseVideo).toHaveBeenCalledTimes(1);expect(controller.getSnapshot().phase).not.toBe('armed');await vi.advanceTimersByTimeAsync(100);expect(controller.getSnapshot().phase).toBe('armed');
+  for(const timeMs of [0,100,200])lease.sample({rms:.5,timeMs});await flush();
+  expect(s.handle.playVideo).toHaveBeenCalledTimes(1);expect(seekTo).not.toHaveBeenCalled();expect(controller.getSnapshot().phase).toBe('playing');await controller.stop();expect(s.handle.destroy).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
  });
 });
