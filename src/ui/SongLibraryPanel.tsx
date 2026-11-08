@@ -1,3 +1,4 @@
+import { ExplanationScope } from './ExplanationScope';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { deleteSong, duplicate, libraryLimits, upsertSong, type Library, type Song, type SongLibrary, type Service } from '../library/model';
 import { importChoices, mergeImport, parseImport, readLegacyBackup, type ImportChoice, type ImportData } from '../library/backup';
@@ -44,7 +45,7 @@ export function SongLibraryPanel(props: Props) {
   }
   return <div className="library-tools">
     {props.loadError && <p role="alert">曲リストを読み込めません: {props.loadError}。保存済みデータは変更していません。再読込して確認してください。</p>}
-    <details id="song-picker" className="tool-panel"><summary>曲を選ぶ・検索</summary><div className="panel-body">
+    <details id="song-picker" className="tool-panel"><summary>曲を選ぶ・検索</summary><div className="panel-body"><ExplanationScope label="曲を選ぶ">
       <label>曲を検索<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="曲名・アーティスト・動画ID" /></label>
       <label>並べ替え<select value={sort} onChange={event=>setSort(event.target.value)}><option value="registered">登録順</option><option value="title">曲名順</option><option value="artist">アーティスト順</option></select></label>
       <ul className="song-list compact-song-list">{matchingSongs.map(song => <li key={song.videoId}>
@@ -55,8 +56,8 @@ export function SongLibraryPanel(props: Props) {
       {!library.songs.length && <p>登録曲がありません。「曲管理」で登録してください。</p>}
       {library.songs.length > 0 && !matchingSongs.length && <p>一致する曲がありません。検索語を変更してください。</p>}
       <p className="compact-note">選択すると前の曲を安全に停止します。未保存の調整は引き継ぎません。</p>
-    </div></details>
-    <details id="song-management" className="tool-panel"><summary>曲管理・登録・バックアップ</summary><div className="panel-body">
+    </ExplanationScope></div></details>
+    <details id="song-management" className="tool-panel"><summary>曲管理・登録・バックアップ</summary><div className="panel-body"><ExplanationScope label="曲管理・登録・バックアップ">
     <h2 id="library-heading">曲リスト</h2>
     <p>曲選択は前の曲を停止・解放してから適用します。編集・削除・復元は「すべて停止」後に行ってください。設定変更は自動保存しません。</p>
     <label>曲を検索<input value={search} onChange={event => setSearch(event.target.value)} placeholder="曲名・アーティスト・動画ID" /></label>
@@ -87,7 +88,7 @@ export function SongLibraryPanel(props: Props) {
       <div className="url-registration"><VideoReferenceInput action={<button className="register-song" type="submit">{editing ? '曲情報を更新' : 'この曲を登録'}</button>} value={draft.videoId} onChange={videoId=>{setDraft(previous=>({...previous,videoId}));titleAutofill.referenceChanged(videoId);setFormNotice(undefined);setDuplicateVideo(undefined);}} /></div>
       <p role="status" aria-live="polite">{titleState.message}</p>
       <button type="button" disabled={titleState.status==='loading'} onClick={()=>titleAutofill.retry(draft.videoId,message=>window.confirm(message))}>タイトルを再取得</button>
-      <small>新規入力時にYouTubeへ動画IDを送ってタイトルを取得します。曲名の手入力を優先し、取得失敗でも登録できます。</small>
+      <small data-help>新規入力時にYouTubeへ動画IDを送ってタイトルを取得します。曲名の手入力を優先し、取得失敗でも登録できます。</small>
       {formNotice&&<p className="registration-notice" role={formNotice.error?'alert':'status'}>{formNotice.text}</p>}
       {duplicateVideo&&<button type="button" onClick={()=>{void props.onSelect(duplicateVideo);}}>登録済みの「{duplicateVideo.title}」を選択</button>}
       <div className="actions"><button type="button" onClick={() => { setFormNotice(undefined);setDuplicateVideo(undefined);titleAutofill.reset();setEditing(undefined); setDraft({ videoId: props.currentVideoId, title: '', artist: '', accompanimentRef: '' }); }}>新規入力に戻す（現在の動画ID）</button></div>
@@ -135,6 +136,6 @@ export function SongLibraryPanel(props: Props) {
       }}>選択内容で復元（チェックした上書きに同意）</button><button onClick={() => setPreview(undefined)}>復元を取り消す</button></div>
     </div>}
     <p role="status">{message}</p>
-    </div></details>
+    </ExplanationScope></div></details>
   </div>;
 }

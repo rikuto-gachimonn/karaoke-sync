@@ -49,7 +49,7 @@ button.stop { background: #923a31; border-color: #923a31; color: white; font-wei
 .correction-controls { grid-template-columns: minmax(0, 1fr) minmax(76px, 1fr) minmax(0, 1fr); align-items: center; margin-top: 8px; gap: 6px; }
 .correction-controls output { text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .save-status:empty { display: none; }
-.tool-links { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; margin-bottom: 12px; }
+.tool-links { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; margin-bottom: 12px; }
 .tool-links button { font-size: .82rem; padding-inline: 4px; }
 .tool-panel { scroll-margin-top: 12px; }
 .tool-panel > summary { cursor: pointer; padding: 12px; min-height: 48px; font-weight: 600; }
@@ -190,18 +190,14 @@ caption { text-align: left; margin-bottom: 8px; }
 #live-fine-controls > summary { min-height:44px; padding:8px 0; }
 
 /* Only explicitly identified supplemental prose is optional. */
-.karaoke-app[data-show-help="false"] [data-help] { display: none !important; }
+.explanation-content [data-help] { display: var(--supplementary-display, none); }
+.explanation-toggle { min-height: 44px; width: auto; font-size: .85rem; margin-bottom: 8px; }
+.explanation-scope, .explanation-content { min-width: 0; }
+.explanation-content > p { font-size: .85rem; }
 .tone-volume { display: grid; gap: .6rem; margin-block: .8rem; min-width: 0; }
 .tone-volume-row { display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .tone-volume-row input { flex: 1; min-width: 0; width: 100%; min-height: 44px; }
 .tone-volume-row output { min-width: 4ch; font-variant-numeric: tabular-nums; }
-.display-preferences { width: fit-content; max-width: 100%; margin: 1rem auto; font-size: .9rem; }
-.display-preferences label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; min-height: 44px; }
-.display-preferences-text { min-width: 0; writing-mode: horizontal-tb; word-break: normal; overflow-wrap: break-word; }
-.display-preferences-control { display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
-/* Override full-width text-input defaults only for this checkbox. */
-.display-preferences input { width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; margin: 0; flex: none; }
-.display-preferences-control > span { min-width: 3ch; }
 
 .preview-controls .preview-start { min-height:44px; padding:6px 8px; font-size:.8rem; background:transparent; flex:0 1 auto; }
 .close-settings { display:block; width:100%; min-height:44px; margin-top:12px; }

@@ -7,7 +7,7 @@ export function formatPositionSeconds(value: number): string {
 }
 const signed = (value: number) => `${value < 0 ? '−' : '＋'}${formatPositionSeconds(Math.abs(value))}`;
 
-export function StartPositionSummary({ input }: { input: SyncInput }) {
+export function StartPositionSummary({ input, showDetails = true }: { input: SyncInput; showDetails?: boolean }) {
   let plan: ReturnType<typeof playbackPlan>;
   let bMs: number;
   try { plan = playbackPlan(input); bMs = positionComponentsMs(input).bMs; }
@@ -22,14 +22,14 @@ export function StartPositionSummary({ input }: { input: SyncInput }) {
       <dt>補正後の再生開始位置</dt>
       <dd className="start-position-result"><output aria-label="補正後の再生開始候補">{formatPositionSeconds(plan.seekSec)} 秒</output></dd>
     </dl>
-    <small>YouTube APIへ要求する開始候補です（動画長による上限制限前）。Bluetoothイヤホンの実発音時刻を保証する値ではありません。</small>
-    <details className="start-position-breakdown"><summary>その他の補正・待機の内訳</summary><dl>
+    <small data-help>YouTube APIへ要求する開始候補です（動画長による上限制限前）。Bluetoothイヤホンの実発音時刻を保証する値ではありません。</small>
+    {showDetails && <details className="start-position-breakdown"><summary>その他の補正・待機の内訳</summary><dl>
       <dt>旧オフセット（位置に加算）</dt><dd>{signed(Math.round(input.offsetSec * 1000) / 1000)} 秒</dd>
       <dt>追加比較補正B（有効な分だけ加算）</dt><dd>{signed(bMs / 1000)} 秒</dd>
       <dt>安定化待機（位置にも加算）</dt><dd>{formatPositionSeconds(plan.stabilizationMs / 1000)} 秒</dd>
       <dt>比較固定待機A（位置には加算しない）</dt><dd>{formatPositionSeconds(plan.fixedWaitMs / 1000)} 秒</dd>
       <dt>負の開始位置を補う追加待機</dt><dd>{formatPositionSeconds(plan.negativeWaitMs / 1000)} 秒</dd>
       <dt>検知成立後の予定総待機</dt><dd>{formatPositionSeconds(plan.waitMs / 1000)} 秒</dd>
-    </dl><small>開始候補の下限は0秒です。上限は動画長が分かった再生要求時に制限します。保存した歌い始め位置は変更しません。</small></details>
+    </dl><small>開始候補の下限は0秒です。上限は動画長が分かった再生要求時に制限します。保存した歌い始め位置は変更しません。</small></details>}
   </section>;
 }

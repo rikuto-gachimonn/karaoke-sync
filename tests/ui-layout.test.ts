@@ -40,7 +40,7 @@ describe('スマートフォン向けメイン画面', () => {
   });
   it('設定・管理・診断を閉じて開始し、設定フォームはDOMに保持する', () => {
     const html = render();
-    for (const id of ['settings-panel', 'song-picker', 'song-management', 'diagnostics-panel']) {
+    for (const id of ['developer-settings', 'song-picker', 'song-management', 'diagnostics-panel']) {
       expect(html).toContain(`id="${id}"`);
       expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toMatch(/\bopen(?:=|\s|>)/);
     }
@@ -63,7 +63,7 @@ describe('スマートフォン向けメイン画面', () => {
     expect(button(render({ phase: 'paused', canPrepare: false, message: '一時停止を確認中' }), '再生')).toContain('disabled');
     expect(button(render({ phase: 'paused', canPrepare: false, message: '一時停止中' }), '再生')).not.toContain('disabled');
   });
-  it.each(['waiting', 'starting', 'buffering', 'playing'] as const)('%sで一時停止とすべて停止にアクセスできる', phase => {
+  it.each(['waiting', 'starting', 'buffering'] as const)('%sで一時停止とすべて停止にアクセスできる', phase => {
     const html = render({ phase, canPrepare: false }); expect(button(html, '一時停止')).not.toContain('disabled'); expect(button(html, 'すべてを停止')).not.toContain('disabled');
     expect(html.match(/id="youtube-host"/g)).toHaveLength(1);
   });
