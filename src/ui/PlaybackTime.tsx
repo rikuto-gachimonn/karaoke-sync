@@ -13,6 +13,6 @@ export function PlaybackTime({ controller, phase, stopAction }: { controller: Se
   }, [controller, phase]);
   return <div className="playback-time">
     <div className="playback-time-main"><div className="playback-time-value"><span>現在の再生位置</span><output aria-label="YouTube現在再生時刻" aria-live="off">{formatPlaybackTime(value.position)}</output></div>{stopAction}</div>
-    <small>{value.interpolated ? '補間表示（参考値）。' : 'API取得値。'}再生中は取得値の間を最大0.25秒分補間します。0.01秒は表示の桁数で、測定精度・実際の発音時刻を保証しません。</small>
+    <small>{value.interpolated ? '補間表示（参考値）' : 'API取得値（参考値）'}</small>
   </div>;
 }

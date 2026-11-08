@@ -15,21 +15,20 @@ it('説明OFFでも入力・操作・候補・警告を補足説明の外に保�
  const setItem=vi.fn();vi.stubGlobal('localStorage',{getItem:(key:string)=>key===displayPreferencesKey?JSON.stringify({volumePercent:0,showHelp:false,volumeScale:3}):null,setItem});
  try {
   const html=renderToStaticMarkup(createElement(App,createApp('simulation')));
-  expect(html).toContain('data-show-help="false"');expect(html).toContain('step="5"');
-  for(const text of ['確認音を試す','詳しい説明を表示','YouTubeの歌い始め位置','補正後の再生開始候補','同一出力先は保証できません','端末音量・実際の音圧は保証しません'])expect(html).toContain(text);
+  expect(html).not.toContain('data-show-help');expect(html).toContain('step="5"');
+  for(const text of ['確認音を試す','説明を見る','YouTubeの歌い始め位置','補正後の再生開始候補','同一出力先は保証できません','端末音量・実際の音圧は保証しません'])expect(html).toContain(text);
   for(const match of html.matchAll(/<(p|small|dd)[^>]*data-help[^>]*>(.*?)<\/\1>/g))expect(match[2]).not.toMatch(/<(button|input|select|output)|role="(alert|status)"|aria-describedby/);
   expect(setItem).not.toHaveBeenCalled();
  } finally {vi.unstubAllGlobals();}
 });
-it.each([false,true])('説明切り替えは名前・状態を持つ1つのスイッチで表示する: %s',showHelp=>{
- vi.stubGlobal('localStorage',{getItem:(key:string)=>key===displayPreferencesKey?JSON.stringify({volumePercent:60,showHelp,volumeScale:3}):null,setItem:vi.fn()});
+it.each([false,true])('旧説明設定%sに関係なく欄別の説明を閉じて開始し、保存値に触れない',showHelp=>{
+ const setItem=vi.fn();
+ vi.stubGlobal('localStorage',{getItem:(key:string)=>key===displayPreferencesKey?JSON.stringify({volumePercent:60,showHelp,volumeScale:3}):null,setItem});
  try {
   const html=renderToStaticMarkup(createElement(App,createApp('simulation')));
-  const control=html.slice(html.indexOf('<div class="display-preferences">'));
-  expect(control.match(/role="switch"/g)).toHaveLength(1);
-  expect(control).toMatch(/<label><span[^>]*>詳しい説明を表示<\/span>.*<input[^>]*role="switch"/);
-  expect(control).toContain(`<span aria-hidden="true">${showHelp?'ON':'OFF'}</span>`);
-  expect(control.includes('checked=""')).toBe(showHelp);
+  expect(html).not.toContain('詳しい説明を表示'); expect(html).not.toContain('role="switch"');
+  expect(html.match(/class="explanation-toggle"/g)!.length).toBeGreaterThan(4);
+  expect(html).not.toContain('aria-expanded="true"'); expect(setItem).not.toHaveBeenCalled();
  } finally {vi.unstubAllGlobals();}
 });
 describe('0.60上限への一度だけの移行',()=>{

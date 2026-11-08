@@ -1,3 +1,4 @@
+import { ExplanationScope } from './ExplanationScope';
 import { useEffect, useState } from 'react';
 import { chromeLink } from './chromeLink';
 
@@ -5,7 +6,7 @@ export function ChromeOpen() {
   const [links, setLinks] = useState<ReturnType<typeof chromeLink>>();
   const [message, setMessage] = useState('');
   useEffect(() => { try { setLinks(chromeLink(window.location.href, navigator.userAgent)); } catch { setMessage('ページURLを確認できません'); } }, []);
-  return <details className="tool-panel browser-help"><summary>Google Chromeで開く</summary><div className="panel-body">
+  return <details className="tool-panel browser-help"><summary>Google Chromeで開く</summary><div className="panel-body"><ExplanationScope label="Google Chromeで開く">
     <p>ブラウザを切り替えると曲リストや設定は自動共有されません。必要な曲データは先に曲管理からJSONバックアップを保存し、切替先で復元してください。</p>
     {links?.alreadyChrome ? <p>すでにGoogle Chromeで表示しています。切り替えは不要です。</p> : links?.launch ?
       <a className="button-link" href={links.launch}>Google Chromeで開く</a> : <p>Chromeで開くには、下のURLをコピーしてChromeのアドレス欄に貼り付けてください。</p>}
@@ -24,5 +25,5 @@ export function ChromeOpen() {
     <p role="status">{message}</p>
     <p>YouTube Premiumは、このブラウザのYouTubeに加入アカウントでログインしていても、埋込み動画で広告なしになるとは保証できません。</p>
     <a href="https://support.google.com/youtube/answer/7437519?hl=ja" target="_blank" rel="noopener noreferrer">YouTube公式のPremium・広告に関する案内</a>
-  </div></details>;
+  </ExplanationScope></div></details>;
 }

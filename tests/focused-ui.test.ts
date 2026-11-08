@@ -24,7 +24,7 @@ describe('カラオケ中の表示と停止導線', () => {
   it.each(['playing', 'paused', 'buffering', 'starting'] as const)('%sでは開始前入力は再展開できるDOMに残し、停止を時刻の右側に表示', phase => {
     const html = render(phase);
     expect(html).toMatch(/<button[^>]*class="primary prepare"[^>]*hidden/);
-    for (const id of ['audio-settings', 'correction-panel', 'settings-panel', 'developer-settings']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toContain('hidden');
+    for (const id of ['audio-settings', 'correction-panel', 'developer-settings']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toContain('hidden');
     const row = html.slice(html.indexOf('class="playback-time-main"'), html.indexOf('class="tool-links"'));
     expect(row).toContain('すべてを停止'); expect(row.indexOf('YouTube現在再生時刻')).toBeLessThan(row.indexOf('すべてを停止'));
     expect(html).toContain('今合ってる（現在位置を保存）'); expect(html).toContain('開始位置を50ms戻す');
@@ -36,7 +36,7 @@ describe('カラオケ中の表示と停止導線', () => {
   });
   it('完全停止で開始前の欄を再表示し、診断・比較は閉じた詳細欄へ保持', () => {
     const html = render();
-    for (const id of ['audio-settings', 'correction-panel', 'settings-panel']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toContain('hidden');
+    for (const id of ['audio-settings', 'correction-panel', 'developer-settings']) expect(html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0]).not.toContain('hidden');
     expect(html.match(/<details[^>]*id="audio-settings"[^>]*>/)?.[0]).toContain('open=');
     expect(html.match(/<details[^>]*id="advanced-settings"[^>]*>/)?.[0]).not.toContain('open=');
     expect(html.indexOf('id="advanced-settings"')).toBeLessThan(html.indexOf('id="diagnostics-panel"'));

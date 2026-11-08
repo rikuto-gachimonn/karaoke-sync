@@ -27,10 +27,10 @@ it.each(detectionModes)('%sの案内は用途に対応し、既存の入力値�
  else {expect(html).toContain('伴奏の小さい音から検知');expect(html).not.toContain('BGM音量は最初に小さめ');}
  expect(input).toEqual(before);expect(change).not.toHaveBeenCalled();
 });
-it('保存の直下に同じ検知開始操作があり、長い設定6欄に閉じる操作を置く',()=>{
+it('保存の直下に同じ検知開始操作があり、長い設定5欄に閉じる操作を置く',()=>{
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:vi.fn()});const html=renderToStaticMarkup(createElement(App,createApp('simulation')));
  expect(html).toMatch(/この開始位置設定を保存<\/button><button class="primary correction-prepare"[^>]*>検知を開始/);
- expect(html.match(/この設定欄を閉じる/g)).toHaveLength(6);expect(html).toContain('class="preview-start"');
+ expect(html.match(/この設定欄を閉じる/g)).toHaveLength(5);expect(html).toContain('class="preview-start"');
 });
 function closing(reduce=false){
  let frame:FrameRequestCallback|undefined;
